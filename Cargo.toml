@@ -3,6 +3,10 @@ name = "mobject"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["validation_layers"]
+validation_layers = []
+
 [dependencies]
 ash = "0.38.0"
 ash-molten = "0.20.0"
