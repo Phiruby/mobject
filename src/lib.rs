@@ -1,6 +1,6 @@
 pub mod c_utils;
 
-use ash::vk::{self, ApplicationInfo, InstanceCreateInfo, StructureType};
+use ash::vk::{self, ApplicationInfo, InstanceCreateInfo, StructureType, Entry, Instance};
 use crate::c_utils::Utf8Pointer;
 
 const VALIDATION_LAYERS: Vec<&'static str> = [
@@ -9,7 +9,14 @@ const VALIDATION_LAYERS: Vec<&'static str> = [
 
 pub struct Scene {}
 
-fn create_vk_instance() {
+impl Scene {
+    pub fn new() {
+        let entry = unsafe {Entry::load().unwrap()};
+        let instance = create_vk_instance(entry);
+    }
+}
+
+fn create_vk_instance(entry: &Entry) -> Instance {
     let app_info = ApplicationInfo {
         s_type: StructureType::APPLICATION_INFO,
         p_application_name: "Mobject",
@@ -32,4 +39,17 @@ fn create_vk_instance() {
         pp_enabled_layer_names: utf8_ptr.as_ptr(),
         ..Default::default()
     };
+
+    unsafe {entry.create_instance(&instance_info, None).unwrap()}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoketest_it_works() {
+        Scene::new();
+    }
+}
+

@@ -237,3 +237,13 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[patch.unused]]
+name = "progress-rs"
+version = "1.0.0"
+source = "git+https://github.com/Thema-AI/progress-rs.git#ea3e76881bd931efb4a7874032fa21e7c527ccc8"
+
+[[patch.unused]]
+name = "web-index"
+version = "1.0.0"
+source = "git+https://github.com/Thema-AI/web-index.git#867b23fe7f6505eea5f48fefc0f7e7088cc42954"
