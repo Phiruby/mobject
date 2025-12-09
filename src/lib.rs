@@ -19,7 +19,7 @@ fn create_vk_instance() {
         api_version: vk::make_api_version(0, 1, 1, 0),
         ....Default::default()
     };
-    
+
     #[cfg(feature="validation_layers")]
     let utf8_ptr = Utf8Pointer::new(VALIDATION_LAYERS);
 
