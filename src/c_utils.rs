@@ -1,12 +1,12 @@
 use std::ffi::CString;
 
-struct Utf8Pointer {
+pub struct Utf8Pointer {
     c_strings: Vec<CString>,
     pointers: Vec<*const i8>, // points to cstrings above
 }
 
 impl Utf8Pointer {
-    pub fn new<S: AsRef<&str>>(string_list: &[S]) -> Self {
+    pub fn new<S: AsRef<str>>(string_list: &[S]) -> Self {
         let c_strings: Vec<CString> = string_list
             .iter()
             .map(|s| CString::new(s.as_ref()).unwrap())
