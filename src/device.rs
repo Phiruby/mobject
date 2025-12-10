@@ -78,12 +78,12 @@ impl QueueFamilies {
     }
 }
 
-pub fn create_logical_device(
+pub fn create_logical_device<S: AsRef<str>>(
     queues: &QueueFamilies,
     instance: &Instance,
     device: PhysicalDevice,
     physical_device_features: Option<Vec<PhysicalDeviceFeatures>>,
-    extension_names: Option<Vec<String>>,
+    extension_names: Option<Vec<S>>,
 ) -> Device {
     let device_features = match physical_device_features {
         Some(x) => x,

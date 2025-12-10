@@ -3,8 +3,10 @@ pub mod device;
 use ash::vk::{self, ApplicationInfo, InstanceCreateInfo, StructureType};
 use ash::{Entry, Instance};
 use c_utils::Utf8Pointer;
+use device::QueueFamilies;
 use std::ffi::CString;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 
 pub struct Scene {}
 
@@ -13,6 +15,14 @@ impl Scene {
         let entry = unsafe { Entry::load().unwrap() };
         let instance = create_vk_instance(&entry);
         let physical_device = device::select_physical_device(&instance);
+        let queue_families = QueueFamilies::new(&instance, physical_device);
+        let logical_device = device::create_logical_device(
+            &queue_families,
+            &instance,
+            physical_device,
+            None,
+            Some(DEVICE_EXTENSIONS.to_vec()),
+        );
     }
 }
 
