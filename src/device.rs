@@ -1,6 +1,10 @@
+use crate::c_utils::Utf8Pointer;
 use ash::{
-    Instance,
-    vk::{PhysicalDevice, PhysicalDeviceProperties},
+    Device, Instance,
+    vk::{
+        self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceFeatures,
+        PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType,
+    },
 };
 use dialoguer::FuzzySelect;
 use std::ffi::CStr;
@@ -32,6 +36,85 @@ pub fn select_physical_device(instance: &Instance) -> PhysicalDevice {
         .interact()
         .unwrap();
     physical_devices[chosen_device]
+}
+
+pub struct QueueFamilies {
+    pub graphics_index: usize,
+}
+
+fn get_queue_index_with_capability(
+    capability: vk::QueueFlags,
+    properties: &Vec<QueueFamilyProperties2>,
+) -> usize {
+    let mut potential_queues = properties
+        .iter()
+        .enumerate()
+        .filter(|(_, queue)| queue.queue_family_properties.queue_flags == capability)
+        .map(|(index, _)| index);
+
+    match potential_queues.next() {
+        Some(x) => x,
+        _ => panic!("No queue found with capability {:?}", capability),
+    }
+}
+
+impl QueueFamilies {
+    pub fn new(instance: &Instance, physical_device: PhysicalDevice) -> Self {
+        let num_queues =
+            unsafe { instance.get_physical_device_queue_family_properties2_len(physical_device) };
+
+        let mut queue_families: Vec<QueueFamilyProperties2> =
+            vec![QueueFamilyProperties2::default(); num_queues];
+        unsafe {
+            instance
+                .get_physical_device_queue_family_properties2(physical_device, &mut queue_families)
+        };
+        Self {
+            graphics_index: get_queue_index_with_capability(
+                vk::QueueFlags::GRAPHICS,
+                &queue_families,
+            ),
+        }
+    }
+}
+
+pub fn create_logical_device(
+    queues: &QueueFamilies,
+    instance: &Instance,
+    device: PhysicalDevice,
+    physical_device_features: Option<Vec<PhysicalDeviceFeatures>>,
+    extension_names: Option<Vec<String>>,
+) -> Device {
+    let device_features = match physical_device_features {
+        Some(x) => x,
+        _ => Vec::new(),
+    };
+
+    let device_extensions = match extension_names {
+        Some(x) => x,
+        _ => Vec::new(),
+    };
+
+    let device_extension_ptrs = Utf8Pointer::new(&device_extensions);
+
+    let queue_create_infos = vec![DeviceQueueCreateInfo {
+        s_type: StructureType::DEVICE_QUEUE_CREATE_INFO,
+        queue_family_index: queues.graphics_index as u32,
+        queue_count: 1,
+        ..Default::default()
+    }];
+
+    let device_create_info = DeviceCreateInfo {
+        s_type: StructureType::DEVICE_CREATE_INFO,
+        p_queue_create_infos: queue_create_infos.as_ptr(),
+        queue_create_info_count: queue_create_infos.len() as u32,
+        pp_enabled_extension_names: device_extension_ptrs.as_ptr(),
+        enabled_extension_count: device_extensions.len() as u32,
+        p_enabled_features: device_features.as_ptr(),
+        ..Default::default()
+    };
+
+    unsafe { instance.create_device(device, &device_create_info, None) }.unwrap()
 }
 
 #[cfg(test)]

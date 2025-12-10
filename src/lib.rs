@@ -52,6 +52,7 @@ mod tests {
 
     #[test]
     fn smoketest_it_works() {
-        Scene::new();
+        let entry = unsafe { Entry::load().unwrap() };
+        create_vk_instance(&entry);
     }
 }
