@@ -1,5 +1,6 @@
 pub mod c_utils;
 pub mod device;
+pub mod window;
 use ash::vk::{self, ApplicationInfo, InstanceCreateInfo, StructureType};
 use ash::{Entry, Instance};
 use c_utils::Utf8Pointer;
@@ -13,7 +14,9 @@ pub struct Scene {}
 impl Scene {
     pub fn new() {
         let entry = unsafe { Entry::load().unwrap() };
+        let window = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry);
+        let surface = window::create_surface(&instance, &window);
         let physical_device = device::select_physical_device(&instance);
         let queue_families = QueueFamilies::new(&instance, physical_device);
         let logical_device = device::create_logical_device(
