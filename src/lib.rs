@@ -7,14 +7,13 @@ use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use std::ffi::CString;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
-const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 
 pub struct Scene {}
 
 impl Scene {
     pub fn new() {
         let entry = unsafe { Entry::load().unwrap() };
-        let window = window::create_glfw_window(700, 700);
+        let (window, required_extensions) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry);
         let surface = window::create_surface(&instance, &window);
         let physical_device = device::select_physical_device(&instance);
@@ -24,7 +23,7 @@ impl Scene {
             &instance,
             physical_device,
             None,
-            Some(DEVICE_EXTENSIONS.to_vec()),
+            Some(required_extensions),
         );
     }
 }
