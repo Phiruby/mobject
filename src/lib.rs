@@ -36,6 +36,16 @@ impl Scene {
             None,
             Some(DEVICE_EXTENSIONS.to_vec()),
         );
+        let swapchain = swapchain::create(
+            &logical_device,
+            &instance,
+            present_mode,
+            &swapchain_capabilities.capabilities,
+            ash_surface,
+            surface_format,
+            &queue_families,
+            extent,
+        );
     }
 }
 
