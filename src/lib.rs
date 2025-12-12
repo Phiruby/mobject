@@ -1,5 +1,6 @@
 pub mod c_utils;
 pub mod device;
+pub mod shaders;
 pub mod swapchain;
 pub mod window;
 
