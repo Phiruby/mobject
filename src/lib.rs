@@ -1,11 +1,14 @@
 pub mod c_utils;
 pub mod device;
+pub mod swapchain;
 pub mod window;
-use ash::vk::{self, ApplicationInfo, InstanceCreateInfo, StructureType};
+
+use ash::vk::{self, ApplicationInfo, Handle, InstanceCreateInfo, StructureType, SurfaceKHR};
 use ash::{Entry, Instance};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use std::ffi::CString;
+use swapchain::SwapchainSupport;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 pub struct Scene {}
@@ -16,8 +19,11 @@ impl Scene {
         let (window, required_instance_extensions) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
         let surface = window::create_surface(&instance, &window);
+        let ash_surface = SurfaceKHR::from_raw(surface as u64);
         let physical_device = device::select_physical_device(&instance);
         let queue_families = QueueFamilies::new(&instance, physical_device);
+        let swapchain_capabilities =
+            swapchain::query_support(physical_device, &instance, &entry, ash_surface);
         let logical_device = device::create_logical_device(
             &queue_families,
             &instance,
@@ -35,10 +41,7 @@ fn create_vk_instance(
     let app_name = CString::new("Mobject").unwrap();
     let engine_name = CString::new("No Engine").unwrap();
 
-    let required_instance_extensions = match required_instance_extensions {
-        Some(x) => x,
-        _ => Vec::new(),
-    };
+    let required_instance_extensions = required_instance_extensions.unwrap_or_default();
     let app_info = ApplicationInfo {
         s_type: StructureType::APPLICATION_INFO,
         p_application_name: app_name.as_ptr(),
