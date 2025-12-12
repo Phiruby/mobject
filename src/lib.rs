@@ -4,7 +4,7 @@ pub mod swapchain;
 pub mod window;
 
 use ash::vk::{self, ApplicationInfo, Handle, InstanceCreateInfo, StructureType, SurfaceKHR};
-use ash::{Entry, Instance, khr::surface};
+use ash::{Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use std::ffi::CString;
@@ -36,9 +36,9 @@ impl Scene {
             None,
             Some(DEVICE_EXTENSIONS.to_vec()),
         );
+        let swapchain_device = khr::swapchain::Device::new(&instance, &logical_device);
         let swapchain = swapchain::create(
-            &logical_device,
-            &instance,
+            &swapchain_device,
             present_mode,
             &swapchain_capabilities.capabilities,
             ash_surface,
@@ -46,6 +46,9 @@ impl Scene {
             &queue_families,
             extent,
         );
+        let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
+        let swapchain_imageviews =
+            swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
     }
 }
 

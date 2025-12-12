@@ -1,8 +1,9 @@
 use crate::device::QueueFamilies;
 use ash::vk::{
-    self, ColorSpaceKHR, CompositeAlphaFlagsKHR, Extent2D, Format, PhysicalDevice, PresentModeKHR,
-    SharingMode, StructureType, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR,
-    SwapchainCreateInfoKHR, SwapchainKHR,
+    self, ColorSpaceKHR, ComponentMapping, ComponentSwizzle, CompositeAlphaFlagsKHR, Extent2D,
+    Format, Image, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageView,
+    ImageViewCreateInfo, ImageViewType, PhysicalDevice, PresentModeKHR, SharingMode, StructureType,
+    SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR, SwapchainCreateInfoKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr};
 use glfw::PWindow;
@@ -88,8 +89,7 @@ impl SwapchainSupport {
 }
 
 pub fn create(
-    device: &Device,
-    instance: &Instance,
+    swapchain_device: &khr::swapchain::Device,
     present_mode: PresentModeKHR,
     capabilities: &SurfaceCapabilitiesKHR,
     surface: SurfaceKHR,
@@ -136,6 +136,47 @@ pub fn create(
         swapchain_create_info.p_queue_family_indices = indices.as_ptr();
     }
 
-    let swapchain_device = khr::swapchain::Device::new(instance, device);
     unsafe { swapchain_device.create_swapchain(&swapchain_create_info, None) }.unwrap()
+}
+
+pub fn acquire_images(
+    swapchain: SwapchainKHR,
+    swapchain_device: &khr::swapchain::Device,
+) -> Vec<Image> {
+    unsafe { swapchain_device.get_swapchain_images(swapchain) }.unwrap()
+}
+
+pub fn create_image_views(
+    logical_device: &Device,
+    swapchain_images: &[Image],
+    image_format: SurfaceFormatKHR,
+) -> Vec<ImageView> {
+    let create_infos: Vec<ImageViewCreateInfo> = swapchain_images
+        .iter()
+        .map(|img| ImageViewCreateInfo {
+            s_type: StructureType::IMAGE_VIEW_CREATE_INFO,
+            image: *img,
+            view_type: ImageViewType::TYPE_2D,
+            format: image_format.format,
+            components: ComponentMapping {
+                r: ComponentSwizzle::IDENTITY,
+                g: ComponentSwizzle::IDENTITY,
+                b: ComponentSwizzle::IDENTITY,
+                a: ComponentSwizzle::IDENTITY,
+            },
+            subresource_range: ImageSubresourceRange {
+                aspect_mask: ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        })
+        .collect();
+
+    create_infos
+        .iter()
+        .map(|info| unsafe { logical_device.create_image_view(info, None) }.unwrap())
+        .collect()
 }
