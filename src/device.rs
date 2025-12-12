@@ -1,9 +1,11 @@
 use crate::c_utils::Utf8Pointer;
 use ash::{
     Device, Instance,
+    khr::surface,
     vk::{
         self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceFeatures,
         PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType,
+        SurfaceKHR,
     },
 };
 use dialoguer::FuzzySelect;
@@ -40,6 +42,7 @@ pub fn select_physical_device(instance: &Instance) -> PhysicalDevice {
 
 pub struct QueueFamilies {
     pub graphics_index: usize,
+    pub presentation_index: usize,
 }
 
 fn get_queue_index_with_capability(
@@ -63,8 +66,37 @@ fn get_queue_index_with_capability(
     }
 }
 
+fn get_presentation_queue_index(
+    properties: &Vec<QueueFamilyProperties2>,
+    surface_instance: &surface::Instance,
+    surface: SurfaceKHR,
+    physical_device: PhysicalDevice,
+) -> usize {
+    properties
+        .iter()
+        .enumerate()
+        .filter(|(queue_family_index, family_properties)| {
+            unsafe {
+                surface_instance.get_physical_device_surface_support(
+                    physical_device,
+                    *queue_family_index as u32,
+                    surface,
+                )
+            }
+            .unwrap()
+        })
+        .map(|(idx, _)| idx)
+        .next()
+        .expect("No presentation queue family found!")
+}
+
 impl QueueFamilies {
-    pub fn new(instance: &Instance, physical_device: PhysicalDevice) -> Self {
+    pub fn new(
+        instance: &Instance,
+        surface_instance: &surface::Instance,
+        surface: SurfaceKHR,
+        physical_device: PhysicalDevice,
+    ) -> Self {
         let num_queues =
             unsafe { instance.get_physical_device_queue_family_properties2_len(physical_device) };
 
@@ -78,6 +110,12 @@ impl QueueFamilies {
             graphics_index: get_queue_index_with_capability(
                 vk::QueueFlags::GRAPHICS,
                 &queue_families,
+            ),
+            presentation_index: get_presentation_queue_index(
+                &queue_families,
+                surface_instance,
+                surface,
+                physical_device,
             ),
         }
     }

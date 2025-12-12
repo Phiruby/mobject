@@ -1,23 +1,24 @@
 use ash::vk::{
-    self, ColorSpaceKHR, Format, PhysicalDevice, PresentModeKHR, SurfaceCapabilitiesKHR,
+    self, ColorSpaceKHR, Extent2D, Format, PhysicalDevice, PresentModeKHR, SurfaceCapabilitiesKHR,
     SurfaceFormatKHR, SurfaceKHR,
 };
 use ash::{Entry, Instance, khr};
+use glfw::PWindow;
+
 pub struct SwapchainSupport {
     pub capabilities: SurfaceCapabilitiesKHR,
     pub formats: Vec<SurfaceFormatKHR>,
     pub present_modes: Vec<PresentModeKHR>,
     chosen_format: Option<SurfaceFormatKHR>,
     chosen_present_mode: Option<PresentModeKHR>,
+    extent: Option<Extent2D>,
 }
 
 pub fn query_support(
     device: PhysicalDevice,
-    instance: &Instance,
-    entry: &Entry,
+    surface_instance: &khr::surface::Instance,
     surface: SurfaceKHR,
 ) -> SwapchainSupport {
-    let surface_instance = khr::surface::Instance::new(entry, instance);
     let capabilities =
         unsafe { surface_instance.get_physical_device_surface_capabilities(device, surface) }
             .unwrap();
@@ -33,6 +34,7 @@ pub fn query_support(
         present_modes,
         chosen_format: None,
         chosen_present_mode: None,
+        extent: None,
     }
 }
 
@@ -60,5 +62,24 @@ impl SwapchainSupport {
                 .copied();
             present_modes.unwrap_or(PresentModeKHR::FIFO)
         })
+    }
+
+    pub fn choose_extent(&mut self, window: PWindow) -> Extent2D {
+        match self.capabilities.current_extent.width {
+            // MAX indicates that the user can choose
+            u32::MAX => {
+                let (width_pixels, height_pixels) = window.get_framebuffer_size();
+
+                let min_extent = self.capabilities.min_image_extent;
+                let max_extent = self.capabilities.max_image_extent;
+                Extent2D {
+                    width: width_pixels.clamp(min_extent.width as i32, max_extent.width as i32)
+                        as u32,
+                    height: height_pixels.clamp(min_extent.height as i32, max_extent.height as i32)
+                        as u32,
+                }
+            }
+            _ => self.capabilities.current_extent,
+        }
     }
 }

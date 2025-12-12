@@ -4,7 +4,7 @@ pub mod swapchain;
 pub mod window;
 
 use ash::vk::{self, ApplicationInfo, Handle, InstanceCreateInfo, StructureType, SurfaceKHR};
-use ash::{Entry, Instance};
+use ash::{Entry, Instance, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use std::ffi::CString;
@@ -18,12 +18,17 @@ impl Scene {
         let entry = unsafe { Entry::load().unwrap() };
         let (window, required_instance_extensions) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
+        let surface_instance = surface::Instance::new(&entry, &instance);
         let surface = window::create_surface(&instance, &window);
         let ash_surface = SurfaceKHR::from_raw(surface as u64);
         let physical_device = device::select_physical_device(&instance);
-        let queue_families = QueueFamilies::new(&instance, physical_device);
-        let swapchain_capabilities =
-            swapchain::query_support(physical_device, &instance, &entry, ash_surface);
+        let queue_families =
+            QueueFamilies::new(&instance, &surface_instance, ash_surface, physical_device);
+        let mut swapchain_capabilities =
+            swapchain::query_support(physical_device, &surface_instance, ash_surface);
+        let surface_format = swapchain_capabilities.choose_surface_format();
+        let present_mode = swapchain_capabilities.choose_present_mode();
+        let extent = swapchain_capabilities.choose_extent(window);
         let logical_device = device::create_logical_device(
             &queue_families,
             &instance,
