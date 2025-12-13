@@ -5,7 +5,6 @@ pub mod render_pass;
 pub mod shaders;
 pub mod swapchain;
 pub mod window;
-
 use ash::vk::{
     self, ApplicationInfo, CommandBuffer, Extent2D, Framebuffer, Handle, InstanceCreateInfo,
     Pipeline, RenderPass, StructureType, SurfaceKHR, SwapchainKHR,
@@ -14,17 +13,19 @@ use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
+use std::char::MAX;
 use std::ffi::CString;
-use swapchain::SwapchainSupport;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
+// TODO: set to num swapchain images instead of hardcoding to my machine
+const MAX_FRAMES_IN_FLIGHT: u32 = 3;
 pub struct Scene {
-    sync: window::Sync,
+    sync: Vec<window::Sync>,
     device: Device,
     swapchain_device: khr::swapchain::Device,
     window: PWindow,
     swapchain: SwapchainKHR,
-    command_buffer: CommandBuffer,
+    command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
     framebuffers: Vec<Framebuffer>,
     extent: Extent2D,
@@ -66,6 +67,7 @@ impl Scene {
             extent,
         );
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
+        println!("{:?} <-- total swapchain images", swapchain_images.len());
         let swapchain_imageviews =
             swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
 
@@ -79,7 +81,7 @@ impl Scene {
             extent,
         );
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
-        let command_buffer = buffers::create_command_buffer(pool, &logical_device);
+        let command_buffer = buffers::create_command_buffers(pool, &logical_device);
         let sync = window::create_sync_objects(&logical_device);
         Self {
             sync,
@@ -105,14 +107,15 @@ impl Scene {
             self.device
                 .get_device_queue(0, self.queue_families.presentation_index as u32)
         };
+        let mut current_frame: usize = 0;
         while !(self.window.should_close()) {
             unsafe { glfw::ffi::glfwPollEvents() };
             window::draw_frame(
-                &self.sync,
+                &self.sync[current_frame],
                 &self.device,
                 &self.swapchain_device,
                 self.swapchain,
-                self.command_buffer,
+                self.command_buffer[current_frame],
                 self.render_pass,
                 &self.framebuffers,
                 self.extent,
@@ -120,6 +123,7 @@ impl Scene {
                 graphics_queue,
                 present_queue,
             );
+            current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
         }
     }
 }

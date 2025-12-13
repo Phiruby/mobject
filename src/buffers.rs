@@ -1,3 +1,4 @@
+use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
 use ash::Device;
 use ash::vk::{
@@ -43,18 +44,18 @@ pub fn create_command_pool(device: &Device, queue_families: &QueueFamilies) -> C
     unsafe { device.create_command_pool(&create_info, None) }.unwrap()
 }
 
-pub fn create_command_buffer(pool: CommandPool, device: &Device) -> CommandBuffer {
+pub fn create_command_buffers(pool: CommandPool, device: &Device) -> Vec<CommandBuffer> {
     let create_info = CommandBufferAllocateInfo {
         s_type: StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
         command_pool: pool,
         level: vk::CommandBufferLevel::PRIMARY,
-        command_buffer_count: 1,
+        command_buffer_count: MAX_FRAMES_IN_FLIGHT,
         ..Default::default()
     };
     // taking the first one since we only created one buffer
     // NOTE: rust takes just a single reference for create_info, the C++ API takes a pointer to
     // a vec
-    unsafe { device.allocate_command_buffers(&create_info) }.unwrap()[0]
+    unsafe { device.allocate_command_buffers(&create_info) }.unwrap()
 }
 
 pub fn record_command_buffer(
@@ -95,6 +96,8 @@ pub fn record_command_buffer(
     unsafe { device.cmd_bind_pipeline(buffer, vk::PipelineBindPoint::GRAPHICS, graphics_pipeline) };
 
     unsafe { device.cmd_draw(buffer, 3, 1, 0, 0) };
+
+    unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
     unsafe { device.end_command_buffer(buffer) }.unwrap();
 }

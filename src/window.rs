@@ -1,4 +1,4 @@
-use crate::{buffers, render_pass};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass};
 use ash::vk::{
     CommandBuffer, CommandBufferResetFlags, Extent2D, Framebuffer, Pipeline, PresentInfoKHR, Queue,
     RenderPass, SubmitInfo, SwapchainKHR,
@@ -37,7 +37,7 @@ pub struct Sync {
     pub in_flight: Fence,
 }
 
-pub fn create_sync_objects(device: &Device) -> Sync {
+pub fn create_sync_objects(device: &Device) -> Vec<Sync> {
     let semaphore_info = SemaphoreCreateInfo {
         s_type: StructureType::SEMAPHORE_CREATE_INFO,
         ..Default::default()
@@ -47,14 +47,13 @@ pub fn create_sync_objects(device: &Device) -> Sync {
         flags: vk::FenceCreateFlags::SIGNALED, // start signaled (to draw first frame)
         ..Default::default()
     };
-    let image_available = unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap();
-    let render_finished = unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap();
-    let in_flight = unsafe { device.create_fence(&fence_info, None) }.unwrap();
-    Sync {
-        image_available,
-        render_finished,
-        in_flight,
-    }
+    (0..MAX_FRAMES_IN_FLIGHT)
+        .map(|_| Sync {
+            image_available: unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap(),
+            render_finished: unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap(),
+            in_flight: unsafe { device.create_fence(&fence_info, None) }.unwrap(),
+        })
+        .collect()
 }
 
 pub fn draw_frame(
@@ -71,7 +70,7 @@ pub fn draw_frame(
     present_queue: Queue,
 ) {
     unsafe { device.wait_for_fences(&[sync.in_flight], true, u64::MAX) }.unwrap();
-    unsafe { device.reset_fences(&[sync.in_flight]) };
+    unsafe { device.reset_fences(&[sync.in_flight]) }.unwrap();
     let (image_index, _suboptimal) = unsafe {
         swapchain_device.acquire_next_image(
             swapchain,
