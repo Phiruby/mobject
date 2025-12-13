@@ -1,5 +1,6 @@
 pub mod c_utils;
 pub mod device;
+pub mod render_pass;
 pub mod shaders;
 pub mod swapchain;
 pub mod window;
@@ -50,6 +51,10 @@ impl Scene {
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
         let swapchain_imageviews =
             swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
+
+        let render_pass = render_pass::create(surface_format, &logical_device);
+        let graphics_pipeline =
+            shaders::create_graphics_pipeline(&logical_device, extent, render_pass);
     }
 }
 
