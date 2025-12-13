@@ -1,3 +1,4 @@
+pub mod buffers;
 pub mod c_utils;
 pub mod device;
 pub mod render_pass;
@@ -5,18 +6,34 @@ pub mod shaders;
 pub mod swapchain;
 pub mod window;
 
-use ash::vk::{self, ApplicationInfo, Handle, InstanceCreateInfo, StructureType, SurfaceKHR};
-use ash::{Entry, Instance, khr, khr::surface};
+use ash::vk::{
+    self, ApplicationInfo, CommandBuffer, Extent2D, Framebuffer, Handle, InstanceCreateInfo,
+    Pipeline, RenderPass, StructureType, SurfaceKHR, SwapchainKHR,
+};
+use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
+use glfw::PWindow;
 use std::ffi::CString;
 use swapchain::SwapchainSupport;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
-pub struct Scene {}
+pub struct Scene {
+    sync: window::Sync,
+    device: Device,
+    swapchain_device: khr::swapchain::Device,
+    window: PWindow,
+    swapchain: SwapchainKHR,
+    command_buffer: CommandBuffer,
+    render_pass: RenderPass,
+    framebuffers: Vec<Framebuffer>,
+    extent: Extent2D,
+    graphics_pipeline: Pipeline,
+    queue_families: QueueFamilies,
+}
 
 impl Scene {
-    pub fn new() {
+    pub fn new() -> Self {
         let entry = unsafe { Entry::load().unwrap() };
         let (window, required_instance_extensions) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
@@ -30,7 +47,7 @@ impl Scene {
             swapchain::query_support(physical_device, &surface_instance, ash_surface);
         let surface_format = swapchain_capabilities.choose_surface_format();
         let present_mode = swapchain_capabilities.choose_present_mode();
-        let extent = swapchain_capabilities.choose_extent(window);
+        let extent = swapchain_capabilities.choose_extent(&window);
         let logical_device = device::create_logical_device(
             &queue_families,
             &instance,
@@ -55,6 +72,55 @@ impl Scene {
         let render_pass = render_pass::create(surface_format, &logical_device);
         let graphics_pipeline =
             shaders::create_graphics_pipeline(&logical_device, extent, render_pass);
+        let framebuffers = buffers::create_frame_buffers(
+            &logical_device,
+            render_pass,
+            &swapchain_imageviews,
+            extent,
+        );
+        let pool = buffers::create_command_pool(&logical_device, &queue_families);
+        let command_buffer = buffers::create_command_buffer(pool, &logical_device);
+        let sync = window::create_sync_objects(&logical_device);
+        Self {
+            sync,
+            device: logical_device,
+            swapchain_device,
+            window,
+            command_buffer,
+            swapchain,
+            render_pass,
+            framebuffers,
+            extent,
+            graphics_pipeline,
+            queue_families,
+        }
+    }
+
+    pub fn main_loop(&self) {
+        let graphics_queue = unsafe {
+            self.device
+                .get_device_queue(0, self.queue_families.graphics_index as u32)
+        };
+        let present_queue = unsafe {
+            self.device
+                .get_device_queue(0, self.queue_families.presentation_index as u32)
+        };
+        while !(self.window.should_close()) {
+            unsafe { glfw::ffi::glfwPollEvents() };
+            window::draw_frame(
+                &self.sync,
+                &self.device,
+                &self.swapchain_device,
+                self.swapchain,
+                self.command_buffer,
+                self.render_pass,
+                &self.framebuffers,
+                self.extent,
+                self.graphics_pipeline,
+                graphics_queue,
+                present_queue,
+            );
+        }
     }
 }
 

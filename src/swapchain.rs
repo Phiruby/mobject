@@ -68,7 +68,7 @@ impl SwapchainSupport {
         *p_mode
     }
 
-    pub fn choose_extent(&mut self, window: PWindow) -> Extent2D {
+    pub fn choose_extent(&mut self, window: &PWindow) -> Extent2D {
         match self.capabilities.current_extent.width {
             // MAX indicates that the user can choose
             u32::MAX => {
