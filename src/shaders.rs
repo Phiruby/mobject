@@ -11,6 +11,8 @@ use ash::vk::{
     ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport,
 };
 
+use crate::shapes::{Shape, Vertex2D};
+
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
     let byte_code: Vec<u32> = shader_code
         .chunks_exact(4)
@@ -26,17 +28,6 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
         ..Default::default()
     };
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
-}
-
-fn vertex_input_info<'a>() -> PipelineVertexInputStateCreateInfo<'a> {
-    PipelineVertexInputStateCreateInfo {
-        s_type: StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        vertex_binding_description_count: 0,
-        p_vertex_binding_descriptions: std::ptr::null(),
-        vertex_attribute_description_count: 0,
-        p_vertex_attribute_descriptions: std::ptr::null(),
-        ..Default::default()
-    }
 }
 
 fn input_assembly_info<'a>() -> PipelineInputAssemblyStateCreateInfo<'a> {
@@ -108,7 +99,16 @@ pub fn create_graphics_pipeline(
 
     let shader_stages = vec![vertex_stage_info, fragment_stage_info];
 
-    let vertex_input_into = vertex_input_info();
+    let vertex_input_binding = Vertex2D::binding_description();
+    let vertex_attribute_description = Vertex2D::attribute_descriptions();
+    let vertex_input_info = PipelineVertexInputStateCreateInfo {
+        s_type: StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        vertex_binding_description_count: 0,
+        p_vertex_binding_descriptions: &vertex_input_binding,
+        vertex_attribute_description_count: 0,
+        p_vertex_attribute_descriptions: vertex_attribute_description.as_ptr(),
+        ..Default::default()
+    };
     let input_assembly_info = input_assembly_info();
     let viewport = Viewport {
         x: 0.0,
@@ -156,7 +156,7 @@ pub fn create_graphics_pipeline(
         s_type: StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
         stage_count: 2,
         p_stages: shader_stages.as_ptr(),
-        p_vertex_input_state: &vertex_input_into,
+        p_vertex_input_state: &vertex_input_info,
         p_input_assembly_state: &input_assembly_info,
         p_viewport_state: &viewport_create_info,
         p_rasterization_state: &rasterizatio_info,

@@ -1,11 +1,14 @@
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
+use crate::shapes::{Shape, Vertex2D};
 use ash::Device;
 use ash::vk::{
-    self, ClearColorValue, ClearValue, CommandBuffer, CommandBufferAllocateInfo,
-    CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo, Extent2D, Framebuffer,
-    FramebufferCreateInfo, Handle, ImageView, Offset2D, Pipeline, Rect2D, RenderPass,
-    RenderPassBeginInfo, StructureType, SubpassContents,
+    self, Buffer, BufferCreateInfo, ClearColorValue, ClearValue, CommandBuffer,
+    CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
+    DeviceMemory, Extent2D, Framebuffer, FramebufferCreateInfo, Handle, ImageView,
+    MemoryAllocateInfo, MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
+    PhysicalDeviceMemoryProperties, Pipeline, Rect2D, RenderPass, RenderPassBeginInfo,
+    StructureType, SubpassContents,
 };
 
 pub fn create_frame_buffers(
@@ -100,4 +103,67 @@ pub fn record_command_buffer(
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
     unsafe { device.end_command_buffer(buffer) }.unwrap();
+}
+
+pub fn create_vertex_buffers(device: &Device, num_vertices_upper_bound: usize) -> Vec<Buffer> {
+    let create_info = BufferCreateInfo {
+        s_type: StructureType::BUFFER_CREATE_INFO,
+        size: (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
+        usage: vk::BufferUsageFlags::VERTEX_BUFFER,
+        sharing_mode: vk::SharingMode::EXCLUSIVE,
+        ..Default::default()
+    };
+    (0..MAX_FRAMES_IN_FLIGHT)
+        .map(|_| unsafe { device.create_buffer(&create_info, None) }.unwrap())
+        .collect()
+}
+
+fn find_memory_type(
+    memory_proprties: PhysicalDeviceMemoryProperties,
+    type_filter: u32,
+    properties: MemoryPropertyFlags,
+) -> u32 {
+    (0..memory_proprties.memory_type_count)
+        .find(|i| {
+            ((type_filter & (1 << i)) != 0)
+                && ((memory_proprties.memory_types[*i as usize].property_flags & properties)
+                    == properties)
+        })
+        .unwrap()
+}
+
+pub fn allocate_vertex_buffers_memory(
+    buffers: &[Buffer],
+    device: &Device,
+    physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+) -> Vec<DeviceMemory> {
+    let requirements: Vec<MemoryRequirements> = buffers
+        .iter()
+        .copied()
+        .map(|buffer| unsafe { device.get_buffer_memory_requirements(buffer) })
+        .collect();
+    let alloc_infos: Vec<MemoryAllocateInfo> = requirements
+        .iter()
+        .map(|requirement| MemoryAllocateInfo {
+            allocation_size: requirement.size,
+            memory_type_index: find_memory_type(
+                physical_device_memory_properties,
+                requirement.memory_type_bits,
+                MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+            ),
+            ..Default::default()
+        })
+        .collect();
+
+    let memories: Vec<DeviceMemory> = alloc_infos
+        .iter()
+        .map(|info| unsafe { device.allocate_memory(info, None) }.unwrap())
+        .collect();
+    buffers
+        .iter()
+        .zip(memories.iter())
+        .for_each(|(&buffer, &memory)| {
+            unsafe { device.bind_buffer_memory(buffer, memory, 0) }.unwrap()
+        });
+    memories
 }

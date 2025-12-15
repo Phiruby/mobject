@@ -1,3 +1,4 @@
+use crate::shapes::Shape;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass};
 use ash::vk::{
     CommandBuffer, CommandBufferResetFlags, Extent2D, Framebuffer, Pipeline, PresentInfoKHR, Queue,

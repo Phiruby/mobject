@@ -3,16 +3,19 @@ pub mod c_utils;
 pub mod device;
 pub mod render_pass;
 pub mod shaders;
+pub mod shapes;
 pub mod swapchain;
 pub mod window;
+
 use ash::vk::{
-    self, ApplicationInfo, CommandBuffer, Extent2D, Framebuffer, Handle, InstanceCreateInfo,
-    Pipeline, RenderPass, StructureType, SurfaceKHR, SwapchainKHR,
+    self, ApplicationInfo, Buffer, CommandBuffer, DeviceMemory, Extent2D, Framebuffer, Handle,
+    InstanceCreateInfo, Pipeline, RenderPass, StructureType, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
+use shapes::Shape;
 use std::char::MAX;
 use std::ffi::CString;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
@@ -28,13 +31,16 @@ pub struct Scene {
     command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
     framebuffers: Vec<Framebuffer>,
+    vertex_buffers: Vec<Buffer>,
+    vertex_buffer_memory: Vec<DeviceMemory>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
+    mobjects: Vec<Box<dyn Shape>>,
 }
 
 impl Scene {
-    pub fn new() -> Self {
+    pub fn new(mobjects: Option<Vec<Box<dyn Shape>>>) -> Self {
         let entry = unsafe { Entry::load().unwrap() };
         let (window, required_instance_extensions) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
@@ -83,6 +89,15 @@ impl Scene {
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
         let command_buffer = buffers::create_command_buffers(pool, &logical_device);
         let sync = window::create_sync_objects(&logical_device);
+        // TODO: unhardcode the max 10 vertices
+        let vertex_buffers = buffers::create_vertex_buffers(&logical_device, 10);
+        let physical_device_memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let vertex_buffer_memories = buffers::allocate_vertex_buffers_memory(
+            &vertex_buffers,
+            &logical_device,
+            physical_device_memory_properties,
+        );
         Self {
             sync,
             device: logical_device,
@@ -92,9 +107,12 @@ impl Scene {
             swapchain,
             render_pass,
             framebuffers,
+            vertex_buffers,
+            vertex_buffer_memory: vertex_buffer_memories,
             extent,
             graphics_pipeline,
             queue_families,
+            mobjects: mobjects.unwrap_or_default(),
         }
     }
 
