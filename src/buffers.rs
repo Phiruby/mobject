@@ -3,9 +3,9 @@ use crate::device::{self, QueueFamilies};
 use crate::shapes::{Shape, Vertex2D};
 use ash::Device;
 use ash::vk::{
-    self, Buffer, BufferCreateInfo, ClearColorValue, ClearValue, CommandBuffer,
+    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
     CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DeviceMemory, Extent2D, Framebuffer, FramebufferCreateInfo, Handle, ImageView,
+    DeviceMemory, DeviceSize, Extent2D, Framebuffer, FramebufferCreateInfo, Handle, ImageView,
     MemoryAllocateInfo, MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
     PhysicalDeviceMemoryProperties, Pipeline, Rect2D, RenderPass, RenderPassBeginInfo,
     StructureType, SubpassContents,
@@ -65,7 +65,8 @@ pub fn record_command_buffer(
     device: &Device,
     buffer: CommandBuffer,
     vertex_buffer: Buffer,
-    num_vertices: u32,
+    index_buffer: Buffer,
+    num_indices: u32,
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
@@ -103,24 +104,75 @@ pub fn record_command_buffer(
     unsafe {
         device.cmd_bind_vertex_buffers(buffer, 0, &[vertex_buffer], &[0]);
     }
-    unsafe { device.cmd_draw(buffer, num_vertices, 1, 0, 0) };
+    unsafe { device.cmd_bind_index_buffer(buffer, index_buffer, 0, vk::IndexType::UINT32) };
+    unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, 0, 0, 0) };
 
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
     unsafe { device.end_command_buffer(buffer) }.unwrap();
 }
 
-pub fn create_vertex_buffers(device: &Device, num_vertices_upper_bound: usize) -> Vec<Buffer> {
+pub fn create_vertex_buffers(
+    device: &Device,
+    num_vertices_upper_bound: usize,
+    memory_proprties: PhysicalDeviceMemoryProperties,
+) -> (Vec<Buffer>, Vec<DeviceMemory>) {
+    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
+        .map(|_| {
+            create_buffer(
+                device,
+                (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
+                BufferUsageFlags::VERTEX_BUFFER,
+                memory_proprties,
+            )
+        })
+        .collect();
+    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
+    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+    (buffers, memories)
+}
+
+pub fn create_index_buffers(
+    device: &Device,
+    num_indices_upper_bound: usize,
+    memory_proprties: PhysicalDeviceMemoryProperties,
+) -> (Vec<Buffer>, Vec<DeviceMemory>) {
+    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
+        .map(|_| {
+            create_buffer(
+                device,
+                (size_of::<u32>() * num_indices_upper_bound) as u64,
+                BufferUsageFlags::INDEX_BUFFER,
+                memory_proprties,
+            )
+        })
+        .collect();
+    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
+    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+    (buffers, memories)
+}
+
+fn create_buffer(
+    device: &Device,
+    size: DeviceSize,
+    usage: BufferUsageFlags,
+    memory_proprties: PhysicalDeviceMemoryProperties,
+) -> (Buffer, DeviceMemory) {
     let create_info = BufferCreateInfo {
         s_type: StructureType::BUFFER_CREATE_INFO,
-        size: (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
-        usage: vk::BufferUsageFlags::VERTEX_BUFFER,
+        size: size,
+        usage,
         sharing_mode: vk::SharingMode::EXCLUSIVE,
         ..Default::default()
     };
-    (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| unsafe { device.create_buffer(&create_info, None) }.unwrap())
-        .collect()
+    let buffer = unsafe { device.create_buffer(&create_info, None) }.unwrap();
+    let memory = allocate_vertex_buffers_memory(
+        &[buffer],
+        device,
+        memory_proprties,
+        MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+    );
+    (buffer, memory[0])
 }
 
 fn find_memory_type(
@@ -137,10 +189,11 @@ fn find_memory_type(
         .unwrap()
 }
 
-pub fn allocate_vertex_buffers_memory(
+fn allocate_vertex_buffers_memory(
     buffers: &[Buffer],
     device: &Device,
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+    properties: MemoryPropertyFlags,
 ) -> Vec<DeviceMemory> {
     let requirements: Vec<MemoryRequirements> = buffers
         .iter()
@@ -154,7 +207,7 @@ pub fn allocate_vertex_buffers_memory(
             memory_type_index: find_memory_type(
                 physical_device_memory_properties,
                 requirement.memory_type_bits,
-                MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+                properties,
             ),
             ..Default::default()
         })
