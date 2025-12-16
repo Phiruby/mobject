@@ -103,9 +103,9 @@ pub fn create_graphics_pipeline(
     let vertex_attribute_description = Vertex2D::attribute_descriptions();
     let vertex_input_info = PipelineVertexInputStateCreateInfo {
         s_type: StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        vertex_binding_description_count: 0,
+        vertex_binding_description_count: 1,
         p_vertex_binding_descriptions: &vertex_input_binding,
-        vertex_attribute_description_count: 0,
+        vertex_attribute_description_count: vertex_attribute_description.len() as u32,
         p_vertex_attribute_descriptions: vertex_attribute_description.as_ptr(),
         ..Default::default()
     };

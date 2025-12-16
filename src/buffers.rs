@@ -64,6 +64,8 @@ pub fn create_command_buffers(pool: CommandPool, device: &Device) -> Vec<Command
 pub fn record_command_buffer(
     device: &Device,
     buffer: CommandBuffer,
+    vertex_buffer: Buffer,
+    num_vertices: u32,
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
@@ -98,7 +100,10 @@ pub fn record_command_buffer(
 
     unsafe { device.cmd_bind_pipeline(buffer, vk::PipelineBindPoint::GRAPHICS, graphics_pipeline) };
 
-    unsafe { device.cmd_draw(buffer, 3, 1, 0, 0) };
+    unsafe {
+        device.cmd_bind_vertex_buffers(buffer, 0, &[vertex_buffer], &[0]);
+    }
+    unsafe { device.cmd_draw(buffer, num_vertices, 1, 0, 0) };
 
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution

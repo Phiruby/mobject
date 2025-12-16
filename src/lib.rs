@@ -18,6 +18,7 @@ use glfw::PWindow;
 use shapes::Shape;
 use std::char::MAX;
 use std::ffi::CString;
+use std::thread::current;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 // TODO: set to num swapchain images instead of hardcoding to my machine
@@ -128,7 +129,11 @@ impl Scene {
         let mut current_frame: usize = 0;
         while !(self.window.should_close()) {
             unsafe { glfw::ffi::glfwPollEvents() };
+
             window::draw_frame(
+                self.vertex_buffers[current_frame],
+                self.vertex_buffer_memory[current_frame],
+                &self.mobjects,
                 &self.sync[current_frame],
                 &self.device,
                 &self.swapchain_device,

@@ -1,8 +1,10 @@
-use crate::shapes::Shape;
+use std::ptr::copy_nonoverlapping;
+
+use crate::shapes::{Shape, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass};
 use ash::vk::{
-    CommandBuffer, CommandBufferResetFlags, Extent2D, Framebuffer, Pipeline, PresentInfoKHR, Queue,
-    RenderPass, SubmitInfo, SwapchainKHR,
+    Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D, Framebuffer,
+    MemoryMapFlags, Pipeline, PresentInfoKHR, Queue, RenderPass, SubmitInfo, SwapchainKHR,
 };
 use ash::{Device, khr::swapchain};
 use ash::{
@@ -57,7 +59,29 @@ pub fn create_sync_objects(device: &Device) -> Vec<Sync> {
         .collect()
 }
 
+fn mobjects_to_vertices(mobjects: &[Box<dyn Shape>]) -> Vec<Vertex2D> {
+    let mut vertices: Vec<Vertex2D> = Vec::new();
+    for i in (0..mobjects.len()) {
+        let shape_vertices = mobjects[i].vertices2d();
+        shape_vertices.iter().for_each(|f| vertices.push(f.clone()));
+    }
+    vertices
+}
+
+fn fill_vertex_buffer(device: &Device, memory: DeviceMemory, vertices: &[Vertex2D]) {
+    let memory_loc =
+        unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, MemoryMapFlags::empty()) }.unwrap();
+    unsafe {
+        let dst = memory_loc as *mut Vertex2D;
+        copy_nonoverlapping(vertices.as_ptr(), dst, vertices.len());
+        device.unmap_memory(memory);
+    }
+}
+
 pub fn draw_frame(
+    vertex_buffer: Buffer,
+    vertex_buffer_memory: DeviceMemory,
+    mobjects: &[Box<dyn Shape>],
     sync: &Sync,
     device: &Device,
     swapchain_device: &swapchain::Device,
@@ -72,6 +96,8 @@ pub fn draw_frame(
 ) {
     unsafe { device.wait_for_fences(&[sync.in_flight], true, u64::MAX) }.unwrap();
     unsafe { device.reset_fences(&[sync.in_flight]) }.unwrap();
+    let vertices = mobjects_to_vertices(mobjects);
+    fill_vertex_buffer(device, vertex_buffer_memory, &vertices);
     let (image_index, _suboptimal) = unsafe {
         swapchain_device.acquire_next_image(
             swapchain,
@@ -87,6 +113,8 @@ pub fn draw_frame(
     buffers::record_command_buffer(
         device,
         command_buffer,
+        vertex_buffer,
+        vertices.len() as u32,
         image_index,
         render_pass,
         framebuffers,
