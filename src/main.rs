@@ -5,7 +5,7 @@ fn main() {
     let triangle = Box::new(Triangle::default());
     let shape = Box::new(Rectangle::default());
     println!("{:?}", triangle.vertices2d());
-    let mobjects: Vec<Box<dyn Shape>> = vec![shape];
+    let mobjects: Vec<Box<dyn Shape>> = vec![triangle, shape];
     let scene = Scene::new(Some(mobjects));
     scene.main_loop();
 }
