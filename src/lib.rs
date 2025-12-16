@@ -8,8 +8,9 @@ pub mod swapchain;
 pub mod window;
 
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, DeviceMemory, Extent2D, Framebuffer, Handle,
-    InstanceCreateInfo, Pipeline, RenderPass, StructureType, SurfaceKHR, SwapchainKHR,
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D,
+    Fence, Framebuffer, Handle, InstanceCreateInfo, Pipeline, PresentInfoKHR, Queue, RenderPass,
+    StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -130,24 +131,101 @@ impl Scene {
         while !(self.window.should_close()) {
             unsafe { glfw::ffi::glfwPollEvents() };
 
-            window::draw_frame(
-                self.vertex_buffers[current_frame],
-                self.vertex_buffer_memory[current_frame],
-                &self.mobjects,
-                &self.sync[current_frame],
-                &self.device,
-                &self.swapchain_device,
-                self.swapchain,
-                self.command_buffer[current_frame],
-                self.render_pass,
-                &self.framebuffers,
-                self.extent,
-                self.graphics_pipeline,
-                graphics_queue,
-                present_queue,
-            );
+            self.draw_frame(graphics_queue, present_queue, current_frame);
+            // window::draw_frame(
+            //     self.vertex_buffers[current_frame],
+            //     self.vertex_buffer_memory[current_frame],
+            //     &self.mobjects,
+            //     &self.sync[current_frame],
+            //     &self.device,
+            //     &self.swapchain_device,
+            //     self.swapchain,
+            //     self.command_buffer[current_frame],
+            //     self.render_pass,
+            //     &self.framebuffers,
+            //     self.extent,
+            //     self.graphics_pipeline,
+            //     graphics_queue,
+            //     present_queue,
+            // );
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
         }
+    }
+
+    fn draw_frame(&self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
+        let vertex_buffer = self.vertex_buffers[current_frame];
+        let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
+        let sync = &self.sync[current_frame];
+        let command_buffer = self.command_buffer[current_frame];
+
+        unsafe {
+            self.device
+                .wait_for_fences(&[sync.in_flight], true, u64::MAX)
+        }
+        .unwrap();
+        unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
+        let vertices = shapes::mobjects_to_vertices(&self.mobjects);
+        window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
+        let (image_index, _suboptimal) = unsafe {
+            self.swapchain_device.acquire_next_image(
+                self.swapchain,
+                u64::MAX,
+                sync.image_available,
+                Fence::null(),
+            )
+        }
+        .unwrap();
+        unsafe {
+            self.device
+                .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
+        }
+        .unwrap();
+
+        buffers::record_command_buffer(
+            &self.device,
+            command_buffer,
+            vertex_buffer,
+            vertices.len() as u32,
+            image_index,
+            self.render_pass,
+            &self.framebuffers,
+            self.extent,
+            self.graphics_pipeline,
+        );
+        let semaphores = vec![sync.image_available];
+        let wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = vec![sync.render_finished];
+        let submit_info = SubmitInfo {
+            s_type: StructureType::SUBMIT_INFO,
+            wait_semaphore_count: 1,
+            p_wait_semaphores: semaphores.as_ptr(),
+            p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: &command_buffer,
+            signal_semaphore_count: 1,
+            p_signal_semaphores: signal_semaphores.as_ptr(),
+            ..Default::default()
+        };
+        unsafe {
+            self.device
+                .queue_submit(graphics_queue, &[submit_info], sync.in_flight)
+        }
+        .unwrap();
+        let swapchains = vec![self.swapchain];
+        let present_info = PresentInfoKHR {
+            s_type: StructureType::PRESENT_INFO_KHR,
+            wait_semaphore_count: 1,
+            p_wait_semaphores: signal_semaphores.as_ptr(),
+            swapchain_count: 1,
+            p_swapchains: swapchains.as_ptr(),
+            p_image_indices: &image_index,
+            ..Default::default()
+        };
+        unsafe {
+            self.swapchain_device
+                .queue_present(present_queue, &present_info)
+        }
+        .unwrap();
     }
 }
 

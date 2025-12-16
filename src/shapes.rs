@@ -76,3 +76,12 @@ impl Default for Triangle {
         }
     }
 }
+
+pub fn mobjects_to_vertices(mobjects: &[Box<dyn Shape>]) -> Vec<Vertex2D> {
+    let mut vertices: Vec<Vertex2D> = Vec::new();
+    for i in (0..mobjects.len()) {
+        let shape_vertices = mobjects[i].vertices2d();
+        shape_vertices.iter().for_each(|f| vertices.push(f.clone()));
+    }
+    vertices
+}
