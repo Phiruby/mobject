@@ -9,8 +9,8 @@ pub mod window;
 
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D,
-    Fence, Framebuffer, Handle, InstanceCreateInfo, Pipeline, PresentInfoKHR, Queue, RenderPass,
-    StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
+    Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags, Pipeline, PresentInfoKHR,
+    Queue, RenderPass, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -92,14 +92,10 @@ impl Scene {
         let command_buffer = buffers::create_command_buffers(pool, &logical_device);
         let sync = window::create_sync_objects(&logical_device);
         // TODO: unhardcode the max 10 vertices
-        let vertex_buffers = buffers::create_vertex_buffers(&logical_device, 10);
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
-        let vertex_buffer_memories = buffers::allocate_vertex_buffers_memory(
-            &vertex_buffers,
-            &logical_device,
-            physical_device_memory_properties,
-        );
+        let (vertex_buffers, vertex_buffer_memories) =
+            buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         Self {
             sync,
             device: logical_device,
@@ -132,22 +128,6 @@ impl Scene {
             unsafe { glfw::ffi::glfwPollEvents() };
 
             self.draw_frame(graphics_queue, present_queue, current_frame);
-            // window::draw_frame(
-            //     self.vertex_buffers[current_frame],
-            //     self.vertex_buffer_memory[current_frame],
-            //     &self.mobjects,
-            //     &self.sync[current_frame],
-            //     &self.device,
-            //     &self.swapchain_device,
-            //     self.swapchain,
-            //     self.command_buffer[current_frame],
-            //     self.render_pass,
-            //     &self.framebuffers,
-            //     self.extent,
-            //     self.graphics_pipeline,
-            //     graphics_queue,
-            //     present_queue,
-            // );
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
         }
     }

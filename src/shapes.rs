@@ -38,6 +38,12 @@ impl Vertex2D {
 
 pub trait Shape {
     fn vertices2d(&self) -> &Vec<Vertex2D>;
+    fn indices(&self) -> Vec<u32> {
+        (0..self.vertices2d().len() as u32).collect()
+    }
+    fn vertices_and_indices(&self) -> (&Vec<Vertex2D>, Vec<u32>) {
+        (self.vertices2d(), self.indices())
+    }
 }
 
 pub struct Triangle {
