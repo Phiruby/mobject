@@ -1,6 +1,9 @@
 use ash::vk::{self, VertexInputAttributeDescription, VertexInputBindingDescription};
 use glm::{Vec2, Vec3};
 use std::mem::offset_of;
+
+#[repr(C)]
+#[derive(Clone, Debug)]
 pub struct Vertex2D {
     position: Vec2,
     color: Vec3,
