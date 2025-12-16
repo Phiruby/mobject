@@ -65,7 +65,8 @@ pub fn record_command_buffer(
     device: &Device,
     buffer: CommandBuffer,
     vertex_buffer: Buffer,
-    num_vertices: u32,
+    index_buffer: Buffer,
+    num_indices: u32,
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
@@ -103,7 +104,8 @@ pub fn record_command_buffer(
     unsafe {
         device.cmd_bind_vertex_buffers(buffer, 0, &[vertex_buffer], &[0]);
     }
-    unsafe { device.cmd_draw(buffer, num_vertices, 1, 0, 0) };
+    unsafe { device.cmd_bind_index_buffer(buffer, index_buffer, 0, vk::IndexType::UINT32) };
+    unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, 0, 0, 0) };
 
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
@@ -127,22 +129,6 @@ pub fn create_vertex_buffers(
         .collect();
     let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
     let memories = entities.iter().map(|(_, memory)| *memory).collect();
-    // let create_info = BufferCreateInfo {
-    //     s_type: StructureType::BUFFER_CREATE_INFO,
-    //     size: (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
-    //     usage: vk::BufferUsageFlags::VERTEX_BUFFER,
-    //     sharing_mode: vk::SharingMode::EXCLUSIVE,
-    //     ..Default::default()
-    // };
-    // let buffers: Vec<Buffer> = (0..MAX_FRAMES_IN_FLIGHT)
-    //     .map(|_| unsafe { device.create_buffer(&create_info, None) }.unwrap())
-    //     .collect();
-    // let memory = allocate_vertex_buffers_memory(
-    //     &buffers,
-    //     device,
-    //     memory_proprties,
-    //     MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-    // );
     (buffers, memories)
 }
 

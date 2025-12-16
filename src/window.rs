@@ -68,3 +68,13 @@ pub fn fill_vertex_buffer(device: &Device, memory: DeviceMemory, vertices: &[Ver
         device.unmap_memory(memory);
     }
 }
+
+pub fn fill_index_buffer(device: &Device, memory: DeviceMemory, indices: &[u32]) {
+    let memory_loc =
+        unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, MemoryMapFlags::empty()) }.unwrap();
+    unsafe {
+        let dst = memory_loc as *mut u32;
+        copy_nonoverlapping(indices.as_ptr(), dst, indices.len());
+        device.unmap_memory(memory);
+    }
+}

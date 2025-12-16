@@ -35,6 +35,8 @@ pub struct Scene {
     framebuffers: Vec<Framebuffer>,
     vertex_buffers: Vec<Buffer>,
     vertex_buffer_memory: Vec<DeviceMemory>,
+    index_buffers: Vec<Buffer>,
+    index_buffer_memory: Vec<DeviceMemory>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
@@ -96,6 +98,8 @@ impl Scene {
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let (vertex_buffers, vertex_buffer_memories) =
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
+        let (index_buffers, index_buffer_memory) =
+            buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
         Self {
             sync,
             device: logical_device,
@@ -107,6 +111,8 @@ impl Scene {
             framebuffers,
             vertex_buffers,
             vertex_buffer_memory: vertex_buffer_memories,
+            index_buffers,
+            index_buffer_memory,
             extent,
             graphics_pipeline,
             queue_families,
@@ -135,6 +141,8 @@ impl Scene {
     fn draw_frame(&self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
         let vertex_buffer = self.vertex_buffers[current_frame];
         let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
+        let index_buffer = self.index_buffers[current_frame];
+        let index_buffer_memory = self.index_buffer_memory[current_frame];
         let sync = &self.sync[current_frame];
         let command_buffer = self.command_buffer[current_frame];
 
@@ -144,8 +152,9 @@ impl Scene {
         }
         .unwrap();
         unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
-        let vertices = shapes::mobjects_to_vertices(&self.mobjects);
+        let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
+        window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
         let (image_index, _suboptimal) = unsafe {
             self.swapchain_device.acquire_next_image(
                 self.swapchain,
@@ -165,7 +174,8 @@ impl Scene {
             &self.device,
             command_buffer,
             vertex_buffer,
-            vertices.len() as u32,
+            index_buffer,
+            indices.len() as u32,
             image_index,
             self.render_pass,
             &self.framebuffers,
