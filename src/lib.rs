@@ -5,8 +5,8 @@ pub mod render_pass;
 pub mod shaders;
 pub mod shapes;
 pub mod swapchain;
+pub mod transforms;
 pub mod window;
-
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D,
     Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags, Pipeline, PresentInfoKHR,
@@ -16,9 +16,9 @@ use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
-use shapes::Shape;
+use shapes::{Shape, UBO};
 use std::char::MAX;
-use std::ffi::CString;
+use std::ffi::{CString, c_void};
 use std::thread::current;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
@@ -37,10 +37,14 @@ pub struct Scene {
     vertex_buffer_memory: Vec<DeviceMemory>,
     index_buffers: Vec<Buffer>,
     index_buffer_memory: Vec<DeviceMemory>,
+    uniform_buffers: Vec<Buffer>,
+    uniform_buffer_memories: Vec<DeviceMemory>,
+    uniform_buffer_mapped_memories: Vec<*mut c_void>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
     mobjects: Vec<Box<dyn Shape>>,
+    ubo: UBO,
 }
 
 impl Scene {
@@ -100,6 +104,8 @@ impl Scene {
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         let (index_buffers, index_buffer_memory) =
             buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
+        let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
+            buffers::create_uniform_buffers(&logical_device, physical_device_memory_properties);
         Self {
             sync,
             device: logical_device,
@@ -113,14 +119,35 @@ impl Scene {
             vertex_buffer_memory: vertex_buffer_memories,
             index_buffers,
             index_buffer_memory,
+            uniform_buffers,
+            uniform_buffer_memories,
+            uniform_buffer_mapped_memories,
             extent,
             graphics_pipeline,
             queue_families,
             mobjects: mobjects.unwrap_or_default(),
+            ubo: UBO {
+                model: glm::mat4(
+                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+                ),
+                view: glm::ext::look_at(
+                    glm::vec3(2.0, 2.0, 2.0),
+                    glm::vec3(0.0, 0.0, 0.0),
+                    glm::vec3(0.0, 0.0, 1.0),
+                ),
+                proj: (glm::ext::perspective(
+                    glm::radians(45.0),
+                    (extent.width / extent.height) as f32,
+                    0.1,
+                    10.0,
+                )),
+            },
         }
     }
 
-    pub fn main_loop(&self) {
+    pub fn main_loop(&mut self) {
+        // opengl to vulkan conversion (inverted y)
+        self.ubo.proj[1][1] *= -1.0;
         let graphics_queue = unsafe {
             self.device
                 .get_device_queue(0, self.queue_families.graphics_index as u32)

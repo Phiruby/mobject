@@ -2,7 +2,8 @@ use std::ffi::CString;
 
 use ash::Device;
 use ash::vk::{
-    self, Extent2D, GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineCache,
+    self, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
+    GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
     PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
@@ -62,11 +63,22 @@ fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     }
 }
 
-fn pipeline_layout_create_info<'a>() -> PipelineLayoutCreateInfo<'a> {
-    PipelineLayoutCreateInfo {
-        s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
+    let ubo_layout_binding = DescriptorSetLayoutBinding {
+        binding: 0,
+        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+        descriptor_count: 1,
+        stage_flags: vk::ShaderStageFlags::VERTEX,
+        p_immutable_samplers: std::ptr::null(),
         ..Default::default()
-    }
+    };
+    let layout_info = DescriptorSetLayoutCreateInfo {
+        s_type: StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        binding_count: 1,
+        p_bindings: &ubo_layout_binding,
+        ..Default::default()
+    };
+    unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
 pub fn create_graphics_pipeline(
@@ -148,7 +160,14 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let pipeline_layout_info = pipeline_layout_create_info();
+    let descriptor_set_layout = create_description_set_layout(device);
+
+    let pipeline_layout_info = PipelineLayoutCreateInfo {
+        s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+        set_layout_count: 1,
+        p_set_layouts: &descriptor_set_layout,
+        ..Default::default()
+    };
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }.unwrap();
 
