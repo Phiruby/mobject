@@ -8,9 +8,10 @@ pub mod swapchain;
 pub mod transforms;
 pub mod window;
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D,
-    Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags, Pipeline, PresentInfoKHR,
-    Queue, RenderPass, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
+    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags,
+    Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, StructureType, SubmitInfo,
+    SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -40,11 +41,13 @@ pub struct Scene {
     uniform_buffers: Vec<Buffer>,
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
+    descriptor_sets: Vec<DescriptorSet>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
     mobjects: Vec<Box<dyn Shape>>,
     ubo: UBO,
+    pipeline_layout: PipelineLayout,
 }
 
 impl Scene {
@@ -86,8 +89,6 @@ impl Scene {
             swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
 
         let render_pass = render_pass::create(surface_format, &logical_device);
-        let graphics_pipeline =
-            shaders::create_graphics_pipeline(&logical_device, extent, render_pass);
         let framebuffers = buffers::create_frame_buffers(
             &logical_device,
             render_pass,
@@ -106,6 +107,22 @@ impl Scene {
             buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers(&logical_device, physical_device_memory_properties);
+
+        let descriptor_set_layout = shaders::create_description_set_layout(&logical_device);
+        let descriptor_pool = shaders::create_descriptor_pool(&logical_device);
+        let descriptor_sets = shaders::create_descriptor_sets(
+            descriptor_set_layout,
+            descriptor_pool,
+            &uniform_buffers,
+            &logical_device,
+        );
+
+        let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
+            &logical_device,
+            extent,
+            render_pass,
+            descriptor_set_layout,
+        );
         Self {
             sync,
             device: logical_device,
@@ -122,6 +139,7 @@ impl Scene {
             uniform_buffers,
             uniform_buffer_memories,
             uniform_buffer_mapped_memories,
+            descriptor_sets,
             extent,
             graphics_pipeline,
             queue_families,
@@ -142,6 +160,7 @@ impl Scene {
                     10.0,
                 )),
             },
+            pipeline_layout,
         }
     }
 
@@ -165,7 +184,7 @@ impl Scene {
         }
     }
 
-    fn draw_frame(&self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
+    fn draw_frame(&mut self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
         let vertex_buffer = self.vertex_buffers[current_frame];
         let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
         let index_buffer = self.index_buffers[current_frame];
@@ -182,6 +201,14 @@ impl Scene {
         let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
         window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
+        // NOTE: transforms here
+        transforms::rotate(&mut self.ubo, 90.0);
+        window::fill_uniform_buffer(
+            &self.device,
+            self.uniform_buffer_mapped_memories[current_frame],
+            &self.ubo,
+        );
+
         let (image_index, _suboptimal) = unsafe {
             self.swapchain_device.acquire_next_image(
                 self.swapchain,
@@ -206,7 +233,9 @@ impl Scene {
             image_index,
             self.render_pass,
             &self.framebuffers,
+            self.descriptor_sets[current_frame],
             self.extent,
+            self.pipeline_layout,
             self.graphics_pipeline,
         );
         let semaphores = vec![sync.image_available];

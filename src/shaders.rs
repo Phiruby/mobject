@@ -2,16 +2,19 @@ use std::ffi::CString;
 
 use ash::Device;
 use ash::vk::{
-    self, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
+    self, Buffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo,
+    DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout,
+    DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
     GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
     PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
     PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo,
     PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, ShaderModule,
-    ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport,
+    ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet,
 };
 
+use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::shapes::{Shape, Vertex2D};
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
@@ -48,7 +51,7 @@ fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
         polygon_mode: vk::PolygonMode::FILL,
         line_width: 1.0,
         cull_mode: vk::CullModeFlags::BACK,
-        front_face: vk::FrontFace::CLOCKWISE,
+        front_face: vk::FrontFace::COUNTER_CLOCKWISE,
         depth_bias_enable: vk::FALSE,
         ..Default::default()
     }
@@ -63,7 +66,7 @@ fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     }
 }
 
-fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
+pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
     let ubo_layout_binding = DescriptorSetLayoutBinding {
         binding: 0,
         descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
@@ -81,11 +84,64 @@ fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
+pub fn create_descriptor_pool(device: &Device) -> DescriptorPool {
+    let pool_size = DescriptorPoolSize {
+        ty: vk::DescriptorType::UNIFORM_BUFFER,
+        descriptor_count: MAX_FRAMES_IN_FLIGHT,
+    };
+    let pool_info = DescriptorPoolCreateInfo {
+        s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+        pool_size_count: 1,
+        p_pool_sizes: &pool_size,
+        max_sets: MAX_FRAMES_IN_FLIGHT,
+        ..Default::default()
+    };
+    unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
+}
+
+pub fn create_descriptor_sets(
+    descriptor_set_layout: DescriptorSetLayout,
+    descriptor_pool: DescriptorPool,
+    uniform_buffers: &[Buffer],
+    device: &Device,
+) -> Vec<DescriptorSet> {
+    let layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
+    let alloc_info = DescriptorSetAllocateInfo {
+        s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+        descriptor_pool,
+        descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+        p_set_layouts: layouts.as_ptr(),
+        ..Default::default()
+    };
+    let descriptor_setes = unsafe { device.allocate_descriptor_sets(&alloc_info) }.unwrap();
+
+    (0..MAX_FRAMES_IN_FLIGHT).for_each(|i| {
+        let buffer_info = DescriptorBufferInfo {
+            buffer: uniform_buffers[i as usize],
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        };
+        let descriptor_write = WriteDescriptorSet {
+            s_type: StructureType::WRITE_DESCRIPTOR_SET,
+            dst_set: descriptor_setes[i as usize],
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            p_buffer_info: &buffer_info,
+            ..Default::default()
+        };
+        unsafe { device.update_descriptor_sets(&[descriptor_write], &[]) };
+    });
+    descriptor_setes
+}
+
 pub fn create_graphics_pipeline(
     device: &Device,
     extent: Extent2D,
     render_pass: RenderPass,
-) -> Pipeline {
+    descriptor_set_layout: DescriptorSetLayout,
+) -> (Pipeline, PipelineLayout) {
     let vertex_bytes = std::fs::read("shaders/vert.spv").unwrap();
     let vertex_shader_module = create_shader_module(vertex_bytes, device);
 
@@ -160,8 +216,6 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let descriptor_set_layout = create_description_set_layout(device);
-
     let pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
         set_layout_count: 1,
@@ -189,6 +243,9 @@ pub fn create_graphics_pipeline(
     };
     let all_pipelines = vec![pipeline_crate_info];
     // taking 0 index since we've created just one pipeline
-    unsafe { device.create_graphics_pipelines(PipelineCache::null(), &all_pipelines, None) }
-        .unwrap()[0]
+    (
+        unsafe { device.create_graphics_pipelines(PipelineCache::null(), &all_pipelines, None) }
+            .unwrap()[0],
+        pipeline_layout,
+    )
 }

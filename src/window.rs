@@ -1,6 +1,7 @@
+use std::ffi::c_void;
 use std::ptr::copy_nonoverlapping;
 
-use crate::shapes::{self, Shape, Vertex2D};
+use crate::shapes::{self, Shape, UBO, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass};
 use ash::vk::{
     Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D, Framebuffer,
@@ -76,5 +77,12 @@ pub fn fill_index_buffer(device: &Device, memory: DeviceMemory, indices: &[u32])
         let dst = memory_loc as *mut u32;
         copy_nonoverlapping(indices.as_ptr(), dst, indices.len());
         device.unmap_memory(memory);
+    }
+}
+
+pub fn fill_uniform_buffer(device: &Device, memory_loc: *mut c_void, ubo: &UBO) {
+    unsafe {
+        let dst = memory_loc as *mut UBO;
+        copy_nonoverlapping(ubo as *const UBO, dst, 1);
     }
 }
