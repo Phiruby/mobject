@@ -3,6 +3,13 @@ use glm::{Vec2, Vec3};
 use std::mem::offset_of;
 
 #[repr(C)]
+pub struct UBO {
+    pub model: glm::Mat4,
+    pub view: glm::Mat4,
+    pub proj: glm::Mat4,
+}
+
+#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Vertex2D {
     position: Vec2,

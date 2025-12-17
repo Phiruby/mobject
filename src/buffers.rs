@@ -1,14 +1,17 @@
+use std::char::MAX;
+use std::ffi::c_void;
+
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
-use crate::shapes::{Shape, Vertex2D};
+use crate::shapes::{Shape, UBO, Vertex2D};
 use ash::Device;
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
     CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DeviceMemory, DeviceSize, Extent2D, Framebuffer, FramebufferCreateInfo, Handle, ImageView,
-    MemoryAllocateInfo, MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
-    PhysicalDeviceMemoryProperties, Pipeline, Rect2D, RenderPass, RenderPassBeginInfo,
-    StructureType, SubpassContents,
+    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Framebuffer, FramebufferCreateInfo, Handle,
+    ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
+    Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint,
+    PipelineLayout, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubpassContents,
 };
 
 pub fn create_frame_buffers(
@@ -70,7 +73,9 @@ pub fn record_command_buffer(
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
+    descriptor_set: DescriptorSet,
     extent: Extent2D,
+    pipeline_layout: PipelineLayout,
     graphics_pipeline: Pipeline,
 ) {
     let command_begin_info = CommandBufferBeginInfo {
@@ -105,6 +110,16 @@ pub fn record_command_buffer(
         device.cmd_bind_vertex_buffers(buffer, 0, &[vertex_buffer], &[0]);
     }
     unsafe { device.cmd_bind_index_buffer(buffer, index_buffer, 0, vk::IndexType::UINT32) };
+    unsafe {
+        device.cmd_bind_descriptor_sets(
+            buffer,
+            PipelineBindPoint::GRAPHICS,
+            pipeline_layout,
+            0,
+            &[descriptor_set],
+            &[],
+        )
+    };
     unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, 0, 0, 0) };
 
     unsafe { device.cmd_end_render_pass(buffer) };
@@ -150,6 +165,30 @@ pub fn create_index_buffers(
     let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
     let memories = entities.iter().map(|(_, memory)| *memory).collect();
     (buffers, memories)
+}
+
+pub fn create_uniform_buffers(
+    device: &Device,
+    memory_proprties: PhysicalDeviceMemoryProperties,
+) -> (Vec<Buffer>, Vec<DeviceMemory>, Vec<*mut c_void>) {
+    let size = size_of::<UBO>() as u64;
+    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
+        .map(|_| {
+            create_buffer(
+                device,
+                size,
+                BufferUsageFlags::UNIFORM_BUFFER,
+                memory_proprties,
+            )
+        })
+        .collect();
+    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
+    let memories: Vec<DeviceMemory> = entities.iter().map(|(_, memory)| *memory).collect();
+    let mapped_memories: Vec<*mut c_void> = memories
+        .iter()
+        .map(|&mem| unsafe { device.map_memory(mem, 0, size, MemoryMapFlags::empty()) }.unwrap())
+        .collect();
+    (buffers, memories, mapped_memories)
 }
 
 fn create_buffer(
