@@ -202,7 +202,7 @@ impl Scene {
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
         window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
         // NOTE: transforms here
-        transforms::rotate(&mut self.ubo, 90.0);
+        transforms::rotate(&mut self.ubo, 720.0);
         window::fill_uniform_buffer(
             &self.device,
             self.uniform_buffer_mapped_memories[current_frame],
