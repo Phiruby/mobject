@@ -5,8 +5,10 @@ pub mod render_pass;
 pub mod shaders;
 pub mod shapes;
 pub mod swapchain;
+pub mod texture;
 pub mod transforms;
 pub mod window;
+
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
     DeviceMemory, Extent2D, Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags,

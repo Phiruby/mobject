@@ -191,7 +191,7 @@ pub fn create_uniform_buffers(
     (buffers, memories, mapped_memories)
 }
 
-fn create_buffer(
+pub fn create_buffer(
     device: &Device,
     size: DeviceSize,
     usage: BufferUsageFlags,
