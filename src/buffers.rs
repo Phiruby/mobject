@@ -214,7 +214,7 @@ pub fn create_buffer(
     (buffer, memory[0])
 }
 
-fn find_memory_type(
+pub fn find_memory_type(
     memory_proprties: PhysicalDeviceMemoryProperties,
     type_filter: u32,
     properties: MemoryPropertyFlags,
