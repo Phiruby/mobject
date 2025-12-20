@@ -1,19 +1,20 @@
 use crate::buffers;
 use ash::Device;
 use ash::vk::{
-    self, Buffer, BufferUsageFlags, DeviceMemory, Extent2D, Extent3D, Format, Image,
-    ImageCreateFlags, ImageCreateInfo, ImageTiling, ImageUsageFlags, MemoryAllocateInfo,
-    MemoryMapFlags, MemoryPropertyFlags, PhysicalDeviceMemoryProperties, StructureType,
+    self, AccessFlags, Buffer, BufferImageCopy, BufferUsageFlags, CommandPool, DependencyFlags,
+    DeviceMemory, Extent2D, Extent3D, Format, Image, ImageAspectFlags, ImageCreateFlags,
+    ImageCreateInfo, ImageLayout, ImageMemoryBarrier, ImageSubresource, ImageSubresourceLayers,
+    ImageSubresourceRange, ImageTiling, ImageUsageFlags, MemoryAllocateInfo, MemoryMapFlags,
+    MemoryPropertyFlags, Offset3D, PhysicalDeviceMemoryProperties, PipelineStageFlags, Queue,
+    StructureType,
 };
-use image::{DynamicImage, ImageBuffer, ImageReader, Rgba32FImage};
-fn load_image(path: &str) -> Rgba32FImage {
+use image::{DynamicImage, ImageBuffer, ImageReader, RgbaImage};
+fn load_image(path: &str) -> RgbaImage {
     ImageReader::open(path)
         .unwrap()
         .decode()
         .unwrap()
-        .as_rgba32f()
-        .unwrap()
-        .clone() // NOTE: forced to clone since returns a reference to rgba
+        .into_rgba8()
 }
 
 fn create_image(
@@ -41,6 +42,7 @@ fn create_image(
         usage: image_usage,
         samples: vk::SampleCountFlags::TYPE_1,
         sharing_mode: vk::SharingMode::EXCLUSIVE,
+        array_layers: 1,
         ..Default::default()
     };
     let image = unsafe { device.create_image(&image_info, None) }.unwrap();
@@ -60,14 +62,118 @@ fn create_image(
     (image, image_memory)
 }
 
+fn transition_image_layout(
+    device: &Device,
+    pool: vk::CommandPool,
+    image: Image,
+    format: Format,
+    old_layout: ImageLayout,
+    new_layout: ImageLayout,
+    graphics_queue: Queue,
+) {
+    let cmd_buffer = buffers::begin_single_time_recording(pool, device);
+
+    let mut barrier = ImageMemoryBarrier {
+        s_type: StructureType::IMAGE_MEMORY_BARRIER,
+        old_layout,
+        new_layout,
+        src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        image,
+        subresource_range: ImageSubresourceRange {
+            aspect_mask: ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        },
+        src_access_mask: AccessFlags::empty(),
+        dst_access_mask: AccessFlags::empty(),
+        ..Default::default()
+    };
+
+    let mut source_stage;
+    let mut destination_stage;
+    match (old_layout, new_layout) {
+        (ImageLayout::UNDEFINED, ImageLayout::TRANSFER_DST_OPTIMAL) => {
+            barrier.src_access_mask = AccessFlags::empty();
+            barrier.dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            source_stage = PipelineStageFlags::TOP_OF_PIPE;
+            destination_stage = PipelineStageFlags::TRANSFER;
+        }
+        (ImageLayout::TRANSFER_DST_OPTIMAL, ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
+            barrier.src_access_mask = AccessFlags::TRANSFER_WRITE;
+            barrier.dst_access_mask = AccessFlags::SHADER_READ;
+            source_stage = PipelineStageFlags::TRANSFER;
+            destination_stage = PipelineStageFlags::FRAGMENT_SHADER;
+        }
+        _ => panic!("Unsupported image transition"),
+    }
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd_buffer,
+            source_stage,
+            destination_stage,
+            DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        )
+    };
+    buffers::end_single_time_recording(device, cmd_buffer, graphics_queue, pool);
+}
+
+fn copy_buffer_to_image(
+    device: &Device,
+    pool: CommandPool,
+    buffer: Buffer,
+    image: Image,
+    width: u32,
+    height: u32,
+    graphics_queue: Queue,
+) {
+    let cmd_buffer = buffers::begin_single_time_recording(pool, device);
+
+    let region = BufferImageCopy {
+        buffer_offset: 0,
+        buffer_row_length: 0,
+        buffer_image_height: 0,
+        image_subresource: ImageSubresourceLayers {
+            aspect_mask: ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        },
+        image_offset: Offset3D { x: 0, y: 0, z: 0 },
+        image_extent: Extent3D {
+            width,
+            height,
+            depth: 1,
+        },
+    };
+    unsafe {
+        device.cmd_copy_buffer_to_image(
+            cmd_buffer,
+            buffer,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[region],
+        )
+    };
+
+    buffers::end_single_time_recording(device, cmd_buffer, graphics_queue, pool);
+}
+
 pub fn create_texture_image(
     device: &Device,
     image_path: &str,
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
-) -> (Buffer, DeviceMemory, Image, DeviceMemory) {
+    pool: CommandPool,
+    graphics_queue: Queue,
+) -> (Image, DeviceMemory) {
     let pixels = load_image(image_path);
     let (width, height) = pixels.dimensions();
-    let size = width * height * 4; // 4 bytes = 32 bits (RGBA f32)
+    let size = width * height * 4; // 4 channels; one byte each
     let (buffer, memory) = buffers::create_buffer(
         device,
         size as u64,
@@ -76,12 +182,9 @@ pub fn create_texture_image(
     );
     let data_loc =
         unsafe { device.map_memory(memory, 0, size as u64, MemoryMapFlags::empty()) }.unwrap();
+    let raw_pixels = pixels.as_raw();
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            pixels.as_raw().as_ptr(),
-            data_loc as *mut f32,
-            size as usize,
-        )
+        std::ptr::copy_nonoverlapping(raw_pixels.as_ptr(), data_loc as *mut u8, size as usize)
     };
     unsafe { device.unmap_memory(memory) };
     let (image, image_memory) = create_image(
@@ -94,5 +197,26 @@ pub fn create_texture_image(
         MemoryPropertyFlags::DEVICE_LOCAL,
         physical_device_memory_properties,
     );
-    (buffer, memory, image, image_memory)
+    transition_image_layout(
+        device,
+        pool,
+        image,
+        Format::R8G8B8A8_SRGB,
+        ImageLayout::UNDEFINED,
+        ImageLayout::TRANSFER_DST_OPTIMAL,
+        graphics_queue,
+    );
+    copy_buffer_to_image(device, pool, buffer, image, width, height, graphics_queue);
+    transition_image_layout(
+        device,
+        pool,
+        image,
+        Format::R8G8B8A8_SRGB,
+        ImageLayout::TRANSFER_DST_OPTIMAL,
+        ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        graphics_queue,
+    );
+    unsafe { device.destroy_buffer(buffer, None) };
+    unsafe { device.free_memory(memory, None) };
+    (image, image_memory)
 }

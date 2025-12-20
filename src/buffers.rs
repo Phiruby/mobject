@@ -8,10 +8,11 @@ use ash::Device;
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
     CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Framebuffer, FramebufferCreateInfo, Handle,
-    ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
+    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Framebuffer, FramebufferCreateInfo,
+    Handle, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
     Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint,
-    PipelineLayout, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubpassContents,
+    PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo,
+    SubpassContents,
 };
 
 pub fn create_frame_buffers(
@@ -50,18 +51,47 @@ pub fn create_command_pool(device: &Device, queue_families: &QueueFamilies) -> C
     unsafe { device.create_command_pool(&create_info, None) }.unwrap()
 }
 
-pub fn create_command_buffers(pool: CommandPool, device: &Device) -> Vec<CommandBuffer> {
+pub fn create_command_buffers(pool: CommandPool, device: &Device, num: u32) -> Vec<CommandBuffer> {
     let create_info = CommandBufferAllocateInfo {
         s_type: StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
         command_pool: pool,
         level: vk::CommandBufferLevel::PRIMARY,
-        command_buffer_count: MAX_FRAMES_IN_FLIGHT,
+        command_buffer_count: num,
         ..Default::default()
     };
     // taking the first one since we only created one buffer
     // NOTE: rust takes just a single reference for create_info, the C++ API takes a pointer to
     // a vec
     unsafe { device.allocate_command_buffers(&create_info) }.unwrap()
+}
+
+pub fn begin_single_time_recording(pool: CommandPool, device: &Device) -> CommandBuffer {
+    let command_buffer = create_command_buffers(pool, device, 1)[0];
+    let begin_info = CommandBufferBeginInfo {
+        s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
+        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+        ..Default::default()
+    };
+    unsafe { device.begin_command_buffer(command_buffer, &begin_info) }.unwrap();
+    command_buffer
+}
+
+pub fn end_single_time_recording(
+    device: &Device,
+    buffer: CommandBuffer,
+    queue: Queue,
+    pool: CommandPool,
+) {
+    unsafe { device.end_command_buffer(buffer) }.unwrap();
+    let submit_info = SubmitInfo {
+        s_type: StructureType::SUBMIT_INFO,
+        command_buffer_count: 1,
+        p_command_buffers: &buffer,
+        ..Default::default()
+    };
+    unsafe { device.queue_submit(queue, &[submit_info], Fence::null()) }.unwrap();
+    unsafe { device.queue_wait_idle(queue) }.unwrap();
+    unsafe { device.free_command_buffers(pool, &[buffer]) };
 }
 
 pub fn record_command_buffer(

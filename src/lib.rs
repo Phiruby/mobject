@@ -11,9 +11,9 @@ pub mod window;
 
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
-    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags,
-    Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, StructureType, SubmitInfo,
-    SurfaceKHR, SwapchainKHR,
+    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, InstanceCreateInfo,
+    MemoryPropertyFlags, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass,
+    StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -40,6 +40,8 @@ pub struct Scene {
     vertex_buffer_memory: Vec<DeviceMemory>,
     index_buffers: Vec<Buffer>,
     index_buffer_memory: Vec<DeviceMemory>,
+    _image: Image,
+    _image_memory: DeviceMemory,
     uniform_buffers: Vec<Buffer>,
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
@@ -98,11 +100,21 @@ impl Scene {
             extent,
         );
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
-        let command_buffer = buffers::create_command_buffers(pool, &logical_device);
+        let command_buffer =
+            buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
         let sync = window::create_sync_objects(&logical_device);
         // TODO: unhardcode the max 10 vertices
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let graphics_queue =
+            unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
+        let (image, image_memory) = texture::create_texture_image(
+            &logical_device,
+            "textures/basic.jpg",
+            physical_device_memory_properties,
+            pool,
+            graphics_queue,
+        );
         let (vertex_buffers, vertex_buffer_memories) =
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         let (index_buffers, index_buffer_memory) =
@@ -140,6 +152,8 @@ impl Scene {
             index_buffer_memory,
             uniform_buffers,
             uniform_buffer_memories,
+            _image: image,
+            _image_memory: image_memory,
             uniform_buffer_mapped_memories,
             descriptor_sets,
             extent,
