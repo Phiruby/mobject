@@ -11,9 +11,9 @@ pub mod window;
 
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
-    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, InstanceCreateInfo,
-    MemoryPropertyFlags, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass,
-    StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
+    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageView, InstanceCreateInfo,
+    MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline, PipelineLayout, PresentInfoKHR, Queue,
+    RenderPass, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -45,6 +45,7 @@ pub struct Scene {
     uniform_buffers: Vec<Buffer>,
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
+    texture_image_view: ImageView,
     descriptor_sets: Vec<DescriptorSet>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
@@ -74,7 +75,11 @@ impl Scene {
             &queue_families,
             &instance,
             physical_device,
-            None,
+            // NOTE: this is needed for texture anisotropy sampling
+            Some(PhysicalDeviceFeatures {
+                sampler_anisotropy: vk::TRUE,
+                ..Default::default()
+            }),
             Some(DEVICE_EXTENSIONS.to_vec()),
         );
         let swapchain_device = khr::swapchain::Device::new(&instance, &logical_device);
@@ -89,8 +94,11 @@ impl Scene {
         );
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
         println!("{:?} <-- total swapchain images", swapchain_images.len());
-        let swapchain_imageviews =
-            swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
+        let swapchain_imageviews = swapchain::create_image_views(
+            &logical_device,
+            &swapchain_images,
+            surface_format.format,
+        );
 
         let render_pass = render_pass::create(surface_format, &logical_device);
         let framebuffers = buffers::create_frame_buffers(
@@ -115,6 +123,7 @@ impl Scene {
             pool,
             graphics_queue,
         );
+        let texture_image_view = texture::create_texture_image_view(&logical_device, image);
         let (vertex_buffers, vertex_buffer_memories) =
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         let (index_buffers, index_buffer_memory) =
@@ -154,6 +163,7 @@ impl Scene {
             uniform_buffer_memories,
             _image: image,
             _image_memory: image_memory,
+            texture_image_view,
             uniform_buffer_mapped_memories,
             descriptor_sets,
             extent,

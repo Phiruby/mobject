@@ -1,13 +1,16 @@
 use crate::buffers;
-use ash::Device;
+use crate::swapchain;
+use ash::vk::Sampler;
+use ash::vk::SamplerCreateInfo;
 use ash::vk::{
     self, AccessFlags, Buffer, BufferImageCopy, BufferUsageFlags, CommandPool, DependencyFlags,
     DeviceMemory, Extent2D, Extent3D, Format, Image, ImageAspectFlags, ImageCreateFlags,
     ImageCreateInfo, ImageLayout, ImageMemoryBarrier, ImageSubresource, ImageSubresourceLayers,
-    ImageSubresourceRange, ImageTiling, ImageUsageFlags, MemoryAllocateInfo, MemoryMapFlags,
-    MemoryPropertyFlags, Offset3D, PhysicalDeviceMemoryProperties, PipelineStageFlags, Queue,
-    StructureType,
+    ImageSubresourceRange, ImageTiling, ImageUsageFlags, ImageView, ImageViewCreateInfo,
+    ImageViewType, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, Offset3D,
+    PhysicalDevice, PhysicalDeviceMemoryProperties, PipelineStageFlags, Queue, StructureType,
 };
+use ash::{Device, Instance};
 use image::{DynamicImage, ImageBuffer, ImageReader, RgbaImage};
 fn load_image(path: &str) -> RgbaImage {
     ImageReader::open(path)
@@ -219,4 +222,38 @@ pub fn create_texture_image(
     unsafe { device.destroy_buffer(buffer, None) };
     unsafe { device.free_memory(memory, None) };
     (image, image_memory)
+}
+
+pub fn create_texture_image_view(device: &Device, image: Image) -> ImageView {
+    // taking the first since only one image created
+    swapchain::create_image_views(device, &[image], Format::R8G8B8A8_SRGB)[0]
+}
+
+pub fn create_sampler(
+    logical_device: &Device,
+    instance: &Instance,
+    physical_device: PhysicalDevice,
+) -> Sampler {
+    let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+    let sampler_info = SamplerCreateInfo {
+        s_type: StructureType::SAMPLER_CREATE_INFO,
+        mag_filter: vk::Filter::LINEAR,
+        min_filter: vk::Filter::LINEAR,
+        address_mode_u: vk::SamplerAddressMode::REPEAT,
+        address_mode_v: vk::SamplerAddressMode::REPEAT,
+        address_mode_w: vk::SamplerAddressMode::REPEAT,
+        anisotropy_enable: vk::TRUE,
+        max_anisotropy: properties.limits.max_sampler_anisotropy,
+        border_color: vk::BorderColor::INT_OPAQUE_BLACK,
+        unnormalized_coordinates: vk::FALSE,
+        compare_enable: vk::FALSE,
+        compare_op: vk::CompareOp::ALWAYS,
+        mipmap_mode: vk::SamplerMipmapMode::LINEAR,
+        mip_lod_bias: 0.0,
+        min_lod: 0.0,
+        max_lod: 0.0,
+        ..Default::default()
+    };
+
+    unsafe { logical_device.create_sampler(&sampler_info, None) }.unwrap()
 }
