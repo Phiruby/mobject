@@ -124,6 +124,7 @@ impl Scene {
             graphics_queue,
         );
         let texture_image_view = texture::create_texture_image_view(&logical_device, image);
+        let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
         let (vertex_buffers, vertex_buffer_memories) =
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         let (index_buffers, index_buffer_memory) =
@@ -137,6 +138,8 @@ impl Scene {
             descriptor_set_layout,
             descriptor_pool,
             &uniform_buffers,
+            texture_image_view,
+            sampler,
             &logical_device,
         );
 

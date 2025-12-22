@@ -14,6 +14,7 @@ pub struct UBO {
 pub struct Vertex2D {
     position: Vec2,
     color: Vec3,
+    tex_coord: Option<Vec2>,
 }
 
 impl Vertex2D {
@@ -25,7 +26,7 @@ impl Vertex2D {
         }
     }
 
-    pub fn attribute_descriptions() -> [VertexInputAttributeDescription; 2] {
+    pub fn attribute_descriptions() -> [VertexInputAttributeDescription; 3] {
         [
             VertexInputAttributeDescription {
                 binding: 0,
@@ -39,17 +40,36 @@ impl Vertex2D {
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: offset_of!(Vertex2D, color) as u32,
             },
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 2,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex2D, tex_coord) as u32,
+            },
         ]
     }
 }
 
 pub trait Shape {
-    fn vertices2d(&self) -> &[Vertex2D];
+    fn vertices2d(&self) -> Vec<Vertex2D> {
+        let vertices = self.get_vertices();
+        // replace NONE with its position
+        vertices
+            .clone()
+            .iter()
+            .map(|vert| Vertex2D {
+                position: vert.position,
+                color: vert.color,
+                tex_coord: Some(vert.tex_coord.unwrap_or(vert.position)),
+            })
+            .collect()
+    }
+    fn get_vertices(&self) -> &[Vertex2D];
     fn indices(&self) -> Vec<u32> {
-        (0..self.vertices2d().len() as u32).collect()
+        (0..self.get_vertices().len() as u32).collect()
     }
     fn vertices_and_indices(&self) -> (&[Vertex2D], Vec<u32>) {
-        (self.vertices2d(), self.indices())
+        (self.get_vertices(), self.indices())
     }
 }
 
@@ -58,7 +78,7 @@ pub struct Triangle {
 }
 
 impl Shape for Triangle {
-    fn vertices2d(&self) -> &[Vertex2D] {
+    fn get_vertices(&self) -> &[Vertex2D] {
         &self.vertices
     }
 }
@@ -76,14 +96,17 @@ impl Default for Triangle {
                 Vertex2D {
                     position: Vec2::new(0.0, -0.5),
                     color: Vec3::new(1.0, 0.0, 0.0),
+                    tex_coord: None,
                 },
                 Vertex2D {
                     position: Vec2::new(0.5, 0.5),
                     color: Vec3::new(0.0, 1.0, 0.0),
+                    tex_coord: None,
                 },
                 Vertex2D {
                     position: Vec2::new(-0.5, 0.5),
                     color: Vec3::new(0.0, 0.0, 1.0),
+                    tex_coord: None,
                 },
             ],
         }
@@ -107,18 +130,22 @@ impl Default for Rectangle {
                 Vertex2D {
                     position: Vec2::new(-0.25, -0.25),
                     color: Vec3::new(1.0, 0.0, 0.0),
+                    tex_coord: None,
                 },
                 Vertex2D {
                     position: Vec2::new(0.25, -0.25),
                     color: Vec3::new(0.0, 1.0, 0.0),
+                    tex_coord: None,
                 },
                 Vertex2D {
                     position: Vec2::new(0.25, 0.25),
                     color: Vec3::new(0.0, 0.0, 1.0),
+                    tex_coord: None,
                 },
                 Vertex2D {
                     position: Vec2::new(-0.25, 0.25),
                     color: Vec3::new(1.0, 1.0, 1.0),
+                    tex_coord: None,
                 },
             ],
         }
@@ -126,7 +153,7 @@ impl Default for Rectangle {
 }
 
 impl Shape for Rectangle {
-    fn vertices2d(&self) -> &[Vertex2D] {
+    fn get_vertices(&self) -> &[Vertex2D] {
         &self.vertices
     }
     fn indices(&self) -> Vec<u32> {

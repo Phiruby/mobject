@@ -2,15 +2,15 @@ use std::ffi::CString;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo,
-    DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout,
-    DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
-    GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineCache,
+    self, Buffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool,
+    DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
+    GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
     PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
     PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo,
-    PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, ShaderModule,
+    PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule,
     ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet,
 };
 
@@ -75,24 +75,39 @@ pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
         p_immutable_samplers: std::ptr::null(),
         ..Default::default()
     };
+    let sampler_layout_binding = DescriptorSetLayoutBinding {
+        binding: 1,
+        descriptor_count: 1,
+        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        p_immutable_samplers: std::ptr::null(),
+        stage_flags: vk::ShaderStageFlags::FRAGMENT,
+        ..Default::default()
+    };
+    let bindings = [ubo_layout_binding, sampler_layout_binding];
     let layout_info = DescriptorSetLayoutCreateInfo {
         s_type: StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        binding_count: 1,
-        p_bindings: &ubo_layout_binding,
+        binding_count: bindings.len() as u32,
+        p_bindings: bindings.as_ptr(),
         ..Default::default()
     };
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
 pub fn create_descriptor_pool(device: &Device) -> DescriptorPool {
-    let pool_size = DescriptorPoolSize {
-        ty: vk::DescriptorType::UNIFORM_BUFFER,
-        descriptor_count: MAX_FRAMES_IN_FLIGHT,
-    };
+    let pool_sizes = [
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT,
+        },
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT,
+        },
+    ];
     let pool_info = DescriptorPoolCreateInfo {
         s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-        pool_size_count: 1,
-        p_pool_sizes: &pool_size,
+        pool_size_count: pool_sizes.len() as u32,
+        p_pool_sizes: pool_sizes.as_ptr(),
         max_sets: MAX_FRAMES_IN_FLIGHT,
         ..Default::default()
     };
@@ -103,6 +118,8 @@ pub fn create_descriptor_sets(
     descriptor_set_layout: DescriptorSetLayout,
     descriptor_pool: DescriptorPool,
     uniform_buffers: &[Buffer],
+    texture_image_view: ImageView,
+    sampler: Sampler,
     device: &Device,
 ) -> Vec<DescriptorSet> {
     let layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
@@ -121,17 +138,34 @@ pub fn create_descriptor_sets(
             offset: 0,
             range: vk::WHOLE_SIZE,
         };
-        let descriptor_write = WriteDescriptorSet {
-            s_type: StructureType::WRITE_DESCRIPTOR_SET,
-            dst_set: descriptor_setes[i as usize],
-            dst_binding: 0,
-            dst_array_element: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-            p_buffer_info: &buffer_info,
-            ..Default::default()
+        let image_info = DescriptorImageInfo {
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image_view: texture_image_view,
+            sampler,
         };
-        unsafe { device.update_descriptor_sets(&[descriptor_write], &[]) };
+        let descriptor_writes = [
+            WriteDescriptorSet {
+                s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                dst_set: descriptor_setes[i as usize],
+                dst_binding: 0,
+                dst_array_element: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                p_buffer_info: &buffer_info,
+                ..Default::default()
+            },
+            WriteDescriptorSet {
+                s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                dst_set: descriptor_setes[i as usize],
+                dst_binding: 1,
+                dst_array_element: 0,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                p_image_info: &image_info,
+                ..Default::default()
+            },
+        ];
+        unsafe { device.update_descriptor_sets(&descriptor_writes, &[]) };
     });
     descriptor_setes
 }
