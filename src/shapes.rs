@@ -14,10 +14,17 @@ pub struct UBO {
 pub struct Vertex2D {
     position: Vec2,
     color: Vec3,
-    tex_coord: Option<Vec2>,
+    tex_coord: Vec2,
 }
 
 impl Vertex2D {
+    pub fn new(position: Vec2, color: Vec3, tex_coord: Option<Vec2>) -> Self {
+        Self {
+            position,
+            color,
+            tex_coord: tex_coord.unwrap_or(position),
+        }
+    }
     pub fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
@@ -51,18 +58,8 @@ impl Vertex2D {
 }
 
 pub trait Shape {
-    fn vertices2d(&self) -> Vec<Vertex2D> {
-        let vertices = self.get_vertices();
-        // replace NONE with its position
-        vertices
-            .clone()
-            .iter()
-            .map(|vert| Vertex2D {
-                position: vert.position,
-                color: vert.color,
-                tex_coord: Some(vert.tex_coord.unwrap_or(vert.position)),
-            })
-            .collect()
+    fn vertices2d(&self) -> &[Vertex2D] {
+        self.get_vertices()
     }
     fn get_vertices(&self) -> &[Vertex2D];
     fn indices(&self) -> Vec<u32> {
@@ -93,21 +90,9 @@ impl Default for Triangle {
     fn default() -> Self {
         Self {
             vertices: vec![
-                Vertex2D {
-                    position: Vec2::new(0.0, -0.5),
-                    color: Vec3::new(1.0, 0.0, 0.0),
-                    tex_coord: None,
-                },
-                Vertex2D {
-                    position: Vec2::new(0.5, 0.5),
-                    color: Vec3::new(0.0, 1.0, 0.0),
-                    tex_coord: None,
-                },
-                Vertex2D {
-                    position: Vec2::new(-0.5, 0.5),
-                    color: Vec3::new(0.0, 0.0, 1.0),
-                    tex_coord: None,
-                },
+                Vertex2D::new(Vec2::new(0.0, -0.5), Vec3::new(1.0, 0.0, 0.0), None),
+                Vertex2D::new(Vec2::new(0.5, 0.5), Vec3::new(0.0, 1.0, 0.0), None),
+                Vertex2D::new(Vec2::new(-0.5, 0.5), Vec3::new(0.0, 0.0, 1.0), None),
             ],
         }
     }
@@ -127,26 +112,26 @@ impl Default for Rectangle {
     fn default() -> Self {
         Self {
             vertices: [
-                Vertex2D {
-                    position: Vec2::new(-0.25, -0.25),
-                    color: Vec3::new(1.0, 0.0, 0.0),
-                    tex_coord: None,
-                },
-                Vertex2D {
-                    position: Vec2::new(0.25, -0.25),
-                    color: Vec3::new(0.0, 1.0, 0.0),
-                    tex_coord: None,
-                },
-                Vertex2D {
-                    position: Vec2::new(0.25, 0.25),
-                    color: Vec3::new(0.0, 0.0, 1.0),
-                    tex_coord: None,
-                },
-                Vertex2D {
-                    position: Vec2::new(-0.25, 0.25),
-                    color: Vec3::new(1.0, 1.0, 1.0),
-                    tex_coord: None,
-                },
+                Vertex2D::new(
+                    Vec2::new(-0.25, -0.25),
+                    Vec3::new(1.0, 0.0, 0.0),
+                    Some(Vec2::new(0.0, 0.0)),
+                ),
+                Vertex2D::new(
+                    Vec2::new(0.25, -0.25),
+                    Vec3::new(0.0, 1.0, 0.0),
+                    Some(Vec2::new(1.0, 0.0)),
+                ),
+                Vertex2D::new(
+                    Vec2::new(0.25, 0.25),
+                    Vec3::new(0.0, 0.0, 1.0),
+                    Some(Vec2::new(1.0, 1.0)),
+                ),
+                Vertex2D::new(
+                    Vec2::new(-0.25, 0.25),
+                    Vec3::new(1.0, 1.0, 1.0),
+                    Some(Vec2::new(0.0, 1.0)),
+                ),
             ],
         }
     }
