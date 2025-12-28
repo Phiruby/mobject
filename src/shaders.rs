@@ -9,7 +9,8 @@ use ash::vk::{
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
     PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo,
+    PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags,
+    PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo,
     PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule,
     ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet,
 };
@@ -37,7 +38,7 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
 fn input_assembly_info<'a>() -> PipelineInputAssemblyStateCreateInfo<'a> {
     PipelineInputAssemblyStateCreateInfo {
         s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        topology: PrimitiveTopology::TRIANGLE_LIST,
+        topology: PrimitiveTopology::PATCH_LIST,
         primitive_restart_enable: vk::FALSE,
         ..Default::default()
     }
@@ -71,7 +72,7 @@ pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
         binding: 0,
         descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
         descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::VERTEX,
+        stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::TESSELLATION_EVALUATION,
         p_immutable_samplers: std::ptr::null(),
         ..Default::default()
     };
@@ -182,6 +183,12 @@ pub fn create_graphics_pipeline(
     let fragment_bytes = std::fs::read("shaders/frag.spv").unwrap();
     let fragment_shader_module = create_shader_module(fragment_bytes, device);
 
+    let tesc_bytes = std::fs::read("shaders/tes_ctrl.spv").unwrap();
+    let tesc_shader_module = create_shader_module(tesc_bytes, device);
+
+    let tese_bytes = std::fs::read("shaders/tes_eval.spv").unwrap();
+    let tese_shader_module = create_shader_module(tese_bytes, device);
+
     let entrypoint = CString::new("main").unwrap();
     let vertex_stage_info = PipelineShaderStageCreateInfo {
         s_type: StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -199,7 +206,23 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let shader_stages = vec![vertex_stage_info, fragment_stage_info];
+    let tesc_info = PipelineShaderStageCreateInfo {
+        s_type: StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage: ShaderStageFlags::TESSELLATION_CONTROL,
+        module: tesc_shader_module,
+        p_name: entrypoint.as_ptr(),
+        ..Default::default()
+    };
+
+    let tese_info = PipelineShaderStageCreateInfo {
+        s_type: StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage: ShaderStageFlags::TESSELLATION_EVALUATION,
+        module: tese_shader_module,
+        p_name: entrypoint.as_ptr(),
+        ..Default::default()
+    };
+
+    let shader_stages = vec![vertex_stage_info, tesc_info, tese_info, fragment_stage_info];
 
     let vertex_input_binding = Vertex2D::binding_description();
     let vertex_attribute_description = Vertex2D::attribute_descriptions();
@@ -259,9 +282,15 @@ pub fn create_graphics_pipeline(
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }.unwrap();
 
+    let tesselation_info = PipelineTessellationStateCreateInfo {
+        s_type: StructureType::PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+        flags: PipelineTessellationStateCreateFlags::empty(),
+        patch_control_points: 3,
+        ..Default::default()
+    };
     let pipeline_crate_info = GraphicsPipelineCreateInfo {
         s_type: StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
-        stage_count: 2,
+        stage_count: shader_stages.len() as u32,
         p_stages: shader_stages.as_ptr(),
         p_vertex_input_state: &vertex_input_info,
         p_input_assembly_state: &input_assembly_info,
@@ -270,6 +299,7 @@ pub fn create_graphics_pipeline(
         p_multisample_state: &multisample_info,
         p_color_blend_state: &color_blend_info,
         p_depth_stencil_state: std::ptr::null(),
+        p_tessellation_state: &tesselation_info,
         layout: pipeline_layout,
         render_pass,
         subpass: 0,

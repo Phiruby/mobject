@@ -1,7 +1,7 @@
 #version 450
 layout (vertices=3) out;
-layout (location = 0) in vec2 texCoord[];
-layout (location = 1) in vec3 fragColor[];
+layout (location = 0) in vec3 fragColor[];
+layout (location = 1) in vec2 texCoord[];
 
 layout (location = 0) out vec2 textureCoord[];
 layout (location = 1) out vec3 fragmentColors[];
@@ -11,6 +11,7 @@ in gl_PerVertex
     vec4 gl_Position;
     float gl_PointSize;
     float gl_ClipDistance[];
+    float gl_CullDistance[];
 } gl_in[gl_MaxPatchVertices];
 
 void main() {

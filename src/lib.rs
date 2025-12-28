@@ -78,6 +78,7 @@ impl Scene {
             // NOTE: this is needed for texture anisotropy sampling
             Some(PhysicalDeviceFeatures {
                 sampler_anisotropy: vk::TRUE,
+                tessellation_shader: vk::TRUE,
                 ..Default::default()
             }),
             Some(DEVICE_EXTENSIONS.to_vec()),
