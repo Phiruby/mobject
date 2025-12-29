@@ -1,5 +1,5 @@
 #version 450
-layout (triangles, equal_spacing, ccw) in;
+layout (triangles, equal_spacing, cw) in;
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
@@ -15,8 +15,9 @@ layout (location = 1) out vec2 fragTexCoord;
 
 void main() {
   // take average position
-  vec4 position = (gl_in[0].gl_Position + gl_in[1].gl_Position + gl_in[2].gl_Position) / 3;
-  fragColor = (fragmentColors[0] + fragmentColors[1] + fragmentColors[2]) / 3;
-  fragTexCoord = (textureCoord[0] + textureCoord[1] + textureCoord[2]) / 3;
-  gl_Position = ubo.proj * ubo.model * ubo.view * position;
+  vec3 bary = gl_TessCoord;
+  vec4 position = (bary.x * gl_in[0].gl_Position + bary.y * gl_in[1].gl_Position + bary.z * gl_in[2].gl_Position);
+  fragColor = (bary.x * fragmentColors[0] + bary.y * fragmentColors[1] + bary.z * fragmentColors[2]);
+  fragTexCoord = (bary.x * textureCoord[0] + bary.y * textureCoord[1] + bary.z * textureCoord[2]);
+  gl_Position = ubo.proj * ubo.view * ubo.model * position;
 }

@@ -35,15 +35,6 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
 }
 
-fn input_assembly_info<'a>() -> PipelineInputAssemblyStateCreateInfo<'a> {
-    PipelineInputAssemblyStateCreateInfo {
-        s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        topology: PrimitiveTopology::PATCH_LIST,
-        primitive_restart_enable: vk::FALSE,
-        ..Default::default()
-    }
-}
-
 fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
     PipelineRasterizationStateCreateInfo {
         s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -234,7 +225,12 @@ pub fn create_graphics_pipeline(
         p_vertex_attribute_descriptions: vertex_attribute_description.as_ptr(),
         ..Default::default()
     };
-    let input_assembly_info = input_assembly_info();
+    let input_assembly_info = PipelineInputAssemblyStateCreateInfo {
+        s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        topology: PrimitiveTopology::PATCH_LIST,
+        primitive_restart_enable: vk::FALSE,
+        ..Default::default()
+    };
     let viewport = Viewport {
         x: 0.0,
         y: 0.0,

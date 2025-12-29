@@ -21,10 +21,10 @@ void main() {
 
   if (gl_InvocationID == 0) {
       // https://docs.vulkan.org/spec/latest/chapters/tessellation.html#tessellation-triangle-tessellation
-      gl_TessLevelInner[0] = 16;
+      gl_TessLevelInner[0] = 1.0;
       // controls outer subdivisions
-      gl_TessLevelOuter[0] = 16;
-      gl_TessLevelOuter[1] = 16;
-      gl_TessLevelOuter[2] = 16;
+      gl_TessLevelOuter[0] = 1.0;
+      gl_TessLevelOuter[1] = 1.0;
+      gl_TessLevelOuter[2] = 1.0;
     }
 }
