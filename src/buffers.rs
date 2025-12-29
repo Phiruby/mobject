@@ -1,9 +1,10 @@
+use std::array;
 use std::char::MAX;
 use std::ffi::c_void;
 
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
-use crate::shapes::{Shape, UBO, Vertex2D};
+use crate::shapes::{GlobalUBO, Shape, UBO, Vertex2D};
 use ash::Device;
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
@@ -197,27 +198,26 @@ pub fn create_index_buffers(
     (buffers, memories)
 }
 
-pub fn create_uniform_buffers(
+pub fn create_uniform_buffers<const N: usize>(
     device: &Device,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>, Vec<*mut c_void>) {
+) -> ([Buffer; N], [DeviceMemory; N], [*mut c_void; N]) {
     let size = size_of::<UBO>() as u64;
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
-            create_buffer(
-                device,
-                size,
-                BufferUsageFlags::UNIFORM_BUFFER,
-                memory_proprties,
-            )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories: Vec<DeviceMemory> = entities.iter().map(|(_, memory)| *memory).collect();
-    let mapped_memories: Vec<*mut c_void> = memories
-        .iter()
-        .map(|&mem| unsafe { device.map_memory(mem, 0, size, MemoryMapFlags::empty()) }.unwrap())
-        .collect();
+    let entities: [(Buffer, DeviceMemory); N] = array::from_fn(|_| {
+        create_buffer(
+            device,
+            size,
+            BufferUsageFlags::UNIFORM_BUFFER,
+            memory_proprties,
+        )
+    });
+    let buffers: [Buffer; N] = array::from_fn(|i| entities[i].0);
+    let memories: [DeviceMemory; N] = array::from_fn(|i| entities[i].1);
+    let mapped_memories: [*mut c_void; N] = array::from_fn(|i| unsafe {
+        device
+            .map_memory(memories[i], 0, size, MemoryMapFlags::empty())
+            .unwrap()
+    });
     (buffers, memories, mapped_memories)
 }
 

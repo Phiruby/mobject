@@ -19,7 +19,7 @@ use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
-use shapes::{Shape, UBO};
+use shapes::{GlobalUBO, Shape, UBO};
 use std::char::MAX;
 use std::ffi::{CString, c_void};
 use std::thread::current;
@@ -52,6 +52,7 @@ pub struct Scene {
     queue_families: QueueFamilies,
     mobjects: Vec<Box<dyn Shape>>,
     ubo: UBO,
+    global_ubo: GlobalUBO,
     pipeline_layout: PipelineLayout,
 }
 
@@ -150,6 +151,7 @@ impl Scene {
             render_pass,
             descriptor_set_layout,
         );
+        let camera_position = glm::vec3(2.0, 2.0, 2.0);
         Self {
             sync,
             device: logical_device,
@@ -178,17 +180,20 @@ impl Scene {
                 model: glm::mat4(
                     1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
                 ),
-                view: glm::ext::look_at(
-                    glm::vec3(2.0, 2.0, 2.0),
-                    glm::vec3(0.0, 0.0, 0.0),
-                    glm::vec3(0.0, 0.0, 1.0),
-                ),
                 proj: (glm::ext::perspective(
                     glm::radians(45.0),
                     (extent.width / extent.height) as f32,
                     0.1,
                     10.0,
                 )),
+            },
+            global_ubo: GlobalUBO {
+                camera_position,
+                view: glm::ext::look_at(
+                    camera_position,
+                    glm::vec3(0.0, 0.0, 0.0),
+                    glm::vec3(0.0, 0.0, 1.0),
+                ),
             },
             pipeline_layout,
         }
