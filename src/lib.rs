@@ -19,7 +19,7 @@ use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
-use shapes::{GlobalUBO, Shape, UBO};
+use shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::char::MAX;
 use std::ffi::{CString, c_void};
 use std::thread::current;
@@ -50,8 +50,7 @@ pub struct Scene {
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
-    mobjects: Vec<Box<dyn Shape>>,
-    ubo: UBO,
+    mobjects: Vec<Box<dyn BuiltShape>>,
     global_ubo: GlobalUBO,
     pipeline_layout: PipelineLayout,
 }
@@ -132,7 +131,11 @@ impl Scene {
         let (index_buffers, index_buffer_memory) =
             buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
-            buffers::create_uniform_buffers(&logical_device, physical_device_memory_properties);
+            buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
+                &logical_device,
+                physical_device_memory_properties,
+                size_of::<GlobalUBO>() as u64,
+            );
 
         let descriptor_set_layout = shaders::create_description_set_layout(&logical_device);
         let descriptor_pool = shaders::create_descriptor_pool(&logical_device);
@@ -152,6 +155,11 @@ impl Scene {
             descriptor_set_layout,
         );
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
+        let mobjects: Vec<Box<dyn BuiltShape>> = mobjects
+            .unwrap_or_default()
+            .into_iter()
+            .map(|obj| obj.build(&logical_device, physical_device_memory_properties))
+            .collect();
         Self {
             sync,
             device: logical_device,
@@ -165,20 +173,24 @@ impl Scene {
             vertex_buffer_memory: vertex_buffer_memories,
             index_buffers,
             index_buffer_memory,
-            uniform_buffers,
-            uniform_buffer_memories,
+            uniform_buffers: uniform_buffers.to_vec(),
+            uniform_buffer_memories: uniform_buffer_memories.to_vec(),
             _image: image,
             _image_memory: image_memory,
             texture_image_view,
-            uniform_buffer_mapped_memories,
+            uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             descriptor_sets,
             extent,
             graphics_pipeline,
             queue_families,
-            mobjects: mobjects.unwrap_or_default(),
-            ubo: UBO {
-                model: glm::mat4(
-                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+            mobjects,
+            // TODO: projection can even be moved to a constant ubo
+            global_ubo: GlobalUBO {
+                camera_position,
+                view: glm::ext::look_at(
+                    camera_position,
+                    glm::vec3(0.0, 0.0, 0.0),
+                    glm::vec3(0.0, 0.0, 1.0),
                 ),
                 proj: (glm::ext::perspective(
                     glm::radians(45.0),
@@ -187,21 +199,13 @@ impl Scene {
                     10.0,
                 )),
             },
-            global_ubo: GlobalUBO {
-                camera_position,
-                view: glm::ext::look_at(
-                    camera_position,
-                    glm::vec3(0.0, 0.0, 0.0),
-                    glm::vec3(0.0, 0.0, 1.0),
-                ),
-            },
             pipeline_layout,
         }
     }
 
     pub fn main_loop(&mut self) {
         // opengl to vulkan conversion (inverted y)
-        self.ubo.proj[1][1] *= -1.0;
+        self.global_ubo.proj[1][1] *= -1.0;
         let graphics_queue = unsafe {
             self.device
                 .get_device_queue(0, self.queue_families.graphics_index as u32)
@@ -237,11 +241,9 @@ impl Scene {
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
         window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
         // NOTE: transforms here
-        transforms::rotate(&mut self.ubo, 720.0);
         window::fill_uniform_buffer(
-            &self.device,
             self.uniform_buffer_mapped_memories[current_frame],
-            &self.ubo,
+            &self.global_ubo,
         );
 
         let (image_index, _suboptimal) = unsafe {

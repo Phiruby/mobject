@@ -201,12 +201,12 @@ pub fn create_index_buffers(
 pub fn create_uniform_buffers<const N: usize>(
     device: &Device,
     memory_proprties: PhysicalDeviceMemoryProperties,
+    struct_size: u64,
 ) -> ([Buffer; N], [DeviceMemory; N], [*mut c_void; N]) {
-    let size = size_of::<UBO>() as u64;
     let entities: [(Buffer, DeviceMemory); N] = array::from_fn(|_| {
         create_buffer(
             device,
-            size,
+            struct_size,
             BufferUsageFlags::UNIFORM_BUFFER,
             memory_proprties,
         )
@@ -215,7 +215,7 @@ pub fn create_uniform_buffers<const N: usize>(
     let memories: [DeviceMemory; N] = array::from_fn(|i| entities[i].1);
     let mapped_memories: [*mut c_void; N] = array::from_fn(|i| unsafe {
         device
-            .map_memory(memories[i], 0, size, MemoryMapFlags::empty())
+            .map_memory(memories[i], 0, struct_size, MemoryMapFlags::empty())
             .unwrap()
     });
     (buffers, memories, mapped_memories)

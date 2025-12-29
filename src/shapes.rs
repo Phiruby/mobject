@@ -1,3 +1,4 @@
+extern crate proc_macro;
 use ash::Device;
 use ash::vk::{
     self, Buffer, DeviceMemory, PhysicalDeviceMemoryProperties, VertexInputAttributeDescription,
@@ -11,13 +12,13 @@ use crate::{MAX_FRAMES_IN_FLIGHT, buffers};
 #[repr(C)]
 pub struct UBO {
     pub model: glm::Mat4,
-    pub proj: glm::Mat4,
 }
 
 #[repr(C)]
 pub struct GlobalUBO {
     pub camera_position: glm::Vec3,
     pub view: glm::Mat4,
+    pub proj: glm::Mat4,
 }
 
 #[repr(C)]
@@ -90,7 +91,7 @@ pub trait BuiltShape {
 
 pub trait Shape {
     fn build(
-        self,
+        self: Box<Self>,
         device: &Device,
         mem_properties: PhysicalDeviceMemoryProperties,
     ) -> Box<dyn BuiltShape>;
@@ -116,7 +117,7 @@ impl Triangle {
 
 impl Shape for Triangle {
     fn build(
-        self,
+        self: Box<Self>,
         device: &Device,
         mem_properties: PhysicalDeviceMemoryProperties,
     ) -> Box<dyn BuiltShape> {
@@ -124,6 +125,7 @@ impl Shape for Triangle {
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 device,
                 mem_properties,
+                size_of::<UBO>() as u64,
             );
         let triangle = Self {
             vertices: self.vertices,
@@ -183,7 +185,7 @@ impl Rectangle {
 
 impl Shape for Rectangle {
     fn build(
-        self,
+        self: Box<Self>,
         device: &Device,
         mem_properties: PhysicalDeviceMemoryProperties,
     ) -> Box<dyn BuiltShape> {
@@ -191,6 +193,7 @@ impl Shape for Rectangle {
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 device,
                 mem_properties,
+                size_of::<UBO>() as u64,
             );
         let triangle = Self {
             vertices: self.vertices,
