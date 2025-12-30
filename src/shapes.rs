@@ -87,6 +87,7 @@ pub trait BuiltShape {
         &[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
+    fn get_ubo_contents(&self) -> &UBO;
 }
 
 pub trait Shape {
@@ -102,6 +103,7 @@ pub struct Triangle {
     uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
+    ubo: UBO,
 }
 
 impl Triangle {
@@ -111,6 +113,11 @@ impl Triangle {
             uniform_buffers: None,
             uniform_buffer_memories: None,
             uniform_mapped_memories: None,
+            ubo: UBO {
+                model: glm::mat4(
+                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+                ),
+            },
         }
     }
 }
@@ -132,6 +139,7 @@ impl Shape for Triangle {
             uniform_buffers: Some(uniform_buffers),
             uniform_buffer_memories: Some(uniform_buffer_memories),
             uniform_mapped_memories: Some(uniform_mapped_memories),
+            ubo: self.ubo,
         };
         Box::new(triangle)
     }
@@ -154,6 +162,9 @@ impl BuiltShape for Triangle {
             self.uniform_mapped_memories.as_ref().unwrap(),
         )
     }
+    fn get_ubo_contents(&self) -> &UBO {
+        &self.ubo
+    }
 }
 impl Default for Triangle {
     fn default() -> Self {
@@ -170,6 +181,7 @@ pub struct Rectangle {
     uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
+    ubo: UBO,
 }
 
 impl Rectangle {
@@ -179,6 +191,11 @@ impl Rectangle {
             uniform_buffers: None,
             uniform_buffer_memories: None,
             uniform_mapped_memories: None,
+            ubo: UBO {
+                model: glm::mat4(
+                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+                ),
+            },
         }
     }
 }
@@ -200,6 +217,7 @@ impl Shape for Rectangle {
             uniform_buffers: Some(uniform_buffers),
             uniform_buffer_memories: Some(uniform_buffer_memories),
             uniform_mapped_memories: Some(uniform_mapped_memories),
+            ubo: self.ubo,
         };
         Box::new(triangle)
     }
@@ -251,6 +269,9 @@ impl BuiltShape for Rectangle {
             self.uniform_buffer_memories.as_ref().unwrap(),
             self.uniform_mapped_memories.as_ref().unwrap(),
         )
+    }
+    fn get_ubo_contents(&self) -> &UBO {
+        &self.ubo
     }
 }
 

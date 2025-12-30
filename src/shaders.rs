@@ -58,24 +58,10 @@ fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     }
 }
 
-pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
-    let ubo_layout_binding = DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::TESSELLATION_EVALUATION,
-        p_immutable_samplers: std::ptr::null(),
-        ..Default::default()
-    };
-    let sampler_layout_binding = DescriptorSetLayoutBinding {
-        binding: 1,
-        descriptor_count: 1,
-        descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-        p_immutable_samplers: std::ptr::null(),
-        stage_flags: vk::ShaderStageFlags::FRAGMENT,
-        ..Default::default()
-    };
-    let bindings = [ubo_layout_binding, sampler_layout_binding];
+pub fn create_description_set_layout(
+    device: &Device,
+    bindings: Vec<DescriptorSetLayoutBinding>,
+) -> DescriptorSetLayout {
     let layout_info = DescriptorSetLayoutCreateInfo {
         s_type: StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         binding_count: bindings.len() as u32,
@@ -85,35 +71,89 @@ pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
-pub fn create_descriptor_pool(device: &Device) -> DescriptorPool {
-    let pool_sizes = [
-        DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: MAX_FRAMES_IN_FLIGHT,
-        },
-        DescriptorPoolSize {
-            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: MAX_FRAMES_IN_FLIGHT,
-        },
-    ];
+pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
+    let pool_sizes = DescriptorPoolSize {
+        ty: vk::DescriptorType::UNIFORM_BUFFER,
+        descriptor_count: MAX_FRAMES_IN_FLIGHT,
+    };
     let pool_info = DescriptorPoolCreateInfo {
         s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-        pool_size_count: pool_sizes.len() as u32,
-        p_pool_sizes: pool_sizes.as_ptr(),
+        pool_size_count: 1,
+        p_pool_sizes: &pool_sizes,
         max_sets: MAX_FRAMES_IN_FLIGHT,
         ..Default::default()
     };
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
 }
 
-pub fn create_descriptor_sets(
+pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
+    let pool_sizes = [
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 10,
+        },
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 10,
+        },
+    ];
+    let pool_info = DescriptorPoolCreateInfo {
+        s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+        pool_size_count: pool_sizes.len() as u32,
+        p_pool_sizes: pool_sizes.as_ptr(),
+        // TODO: this should be MAX_FRAMES_IN_FLIGHT * num objects, since those are the
+        // amount of times this will be used to allocate descriptor sets
+        max_sets: 10,
+        ..Default::default()
+    };
+    unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
+}
+
+pub fn scene_descriptor_sets(
+    device: &Device,
+    scene_descriptor_set_layout: DescriptorSetLayout,
+    scene_descriptor_pool: DescriptorPool,
+    uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+    let layouts = [scene_descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
+    let alloc_info = DescriptorSetAllocateInfo {
+        s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+        descriptor_pool: scene_descriptor_pool,
+        descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+        p_set_layouts: layouts.as_ptr(),
+        ..Default::default()
+    };
+    let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info) }.unwrap();
+
+    (0..MAX_FRAMES_IN_FLIGHT).for_each(|i| {
+        let buffer_info = DescriptorBufferInfo {
+            buffer: uniform_buffers[i as usize],
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        };
+        let descriptor_writes = [WriteDescriptorSet {
+            s_type: StructureType::WRITE_DESCRIPTOR_SET,
+            dst_set: descriptor_sets[i as usize],
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            p_buffer_info: &buffer_info,
+            ..Default::default()
+        }];
+        unsafe { device.update_descriptor_sets(&descriptor_writes, &[]) };
+    });
+    descriptor_sets.try_into().unwrap()
+}
+
+pub fn mobject_descriptor_sets(
+    device: &Device,
     descriptor_set_layout: DescriptorSetLayout,
     descriptor_pool: DescriptorPool,
-    uniform_buffers: &[Buffer],
+    uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
     texture_image_view: ImageView,
     sampler: Sampler,
-    device: &Device,
-) -> Vec<DescriptorSet> {
+) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
     let layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
     let alloc_info = DescriptorSetAllocateInfo {
         s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -122,6 +162,7 @@ pub fn create_descriptor_sets(
         p_set_layouts: layouts.as_ptr(),
         ..Default::default()
     };
+    dbg!("H");
     let descriptor_setes = unsafe { device.allocate_descriptor_sets(&alloc_info) }.unwrap();
 
     (0..MAX_FRAMES_IN_FLIGHT).for_each(|i| {
@@ -159,14 +200,15 @@ pub fn create_descriptor_sets(
         ];
         unsafe { device.update_descriptor_sets(&descriptor_writes, &[]) };
     });
-    descriptor_setes
+    descriptor_setes.try_into().unwrap()
 }
 
 pub fn create_graphics_pipeline(
     device: &Device,
     extent: Extent2D,
     render_pass: RenderPass,
-    descriptor_set_layout: DescriptorSetLayout,
+    scene_descriptor_set_layout: DescriptorSetLayout,
+    mobject_descriptor_set_layout: DescriptorSetLayout,
 ) -> (Pipeline, PipelineLayout) {
     let vertex_bytes = std::fs::read("shaders/vert.spv").unwrap();
     let vertex_shader_module = create_shader_module(vertex_bytes, device);
@@ -269,10 +311,11 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
+    let descriptor_set_layouts = [scene_descriptor_set_layout, mobject_descriptor_set_layout];
     let pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-        set_layout_count: 1,
-        p_set_layouts: &descriptor_set_layout,
+        set_layout_count: descriptor_set_layouts.len() as u32,
+        p_set_layouts: descriptor_set_layouts.as_ptr(),
         ..Default::default()
     };
     let pipeline_layout =

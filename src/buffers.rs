@@ -4,7 +4,7 @@ use std::ffi::c_void;
 
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
-use crate::shapes::{GlobalUBO, Shape, UBO, Vertex2D};
+use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
 use ash::Device;
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
@@ -104,7 +104,9 @@ pub fn record_command_buffer(
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
-    descriptor_set: DescriptorSet,
+    scene_descriptor_set: DescriptorSet,
+    mobject_descriptor_sets: Vec<DescriptorSet>,
+    mobjects: &[Box<dyn BuiltShape>],
     extent: Extent2D,
     pipeline_layout: PipelineLayout,
     graphics_pipeline: Pipeline,
@@ -147,11 +149,29 @@ pub fn record_command_buffer(
             PipelineBindPoint::GRAPHICS,
             pipeline_layout,
             0,
-            &[descriptor_set],
+            &[scene_descriptor_set],
             &[],
         )
     };
-    unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, 0, 0, 0) };
+    let mut cummulative_indices = 0;
+    mobject_descriptor_sets
+        .iter()
+        .zip(mobjects.iter())
+        .for_each(|(&desc_set, mobj)| {
+            let num_indices = mobj.indices().len() as u32;
+            unsafe {
+                device.cmd_bind_descriptor_sets(
+                    buffer,
+                    PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    1,
+                    &[desc_set],
+                    &[],
+                );
+            };
+            unsafe { device.cmd_draw_indexed(buffer, num_indices, 0, cummulative_indices, 0, 0) };
+            cummulative_indices += num_indices;
+        });
 
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution

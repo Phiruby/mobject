@@ -623,8 +623,6 @@ dependencies = [
  "glfw",
  "glm",
  "image",
- "quote",
- "syn",
 ]
 
 [[package]]

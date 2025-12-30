@@ -11,9 +11,10 @@ pub mod window;
 
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
-    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageView, InstanceCreateInfo,
-    MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline, PipelineLayout, PresentInfoKHR, Queue,
-    RenderPass, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
+    DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle,
+    Image, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline,
+    PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo,
+    SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -46,7 +47,9 @@ pub struct Scene {
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
     texture_image_view: ImageView,
-    descriptor_sets: Vec<DescriptorSet>,
+    scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+    // TODO: move descriptor sets in a struct with the actual mobject
+    mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
@@ -137,29 +140,74 @@ impl Scene {
                 size_of::<GlobalUBO>() as u64,
             );
 
-        let descriptor_set_layout = shaders::create_description_set_layout(&logical_device);
-        let descriptor_pool = shaders::create_descriptor_pool(&logical_device);
-        let descriptor_sets = shaders::create_descriptor_sets(
-            descriptor_set_layout,
-            descriptor_pool,
-            &uniform_buffers,
-            texture_image_view,
-            sampler,
+        let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
+            [DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: ShaderStageFlags::TESSELLATION_EVALUATION,
+                ..Default::default()
+            }]
+            .to_vec(),
+        );
+        let scene_descriptor_pool = shaders::scene_descriptor_pool(&logical_device);
+        let scene_descriptor_sets = shaders::scene_descriptor_sets(
+            &logical_device,
+            scene_descriptor_set_layout,
+            scene_descriptor_pool,
+            &uniform_buffers,
         );
 
-        let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
-            &logical_device,
-            extent,
-            render_pass,
-            descriptor_set_layout,
-        );
-        let camera_position = glm::vec3(2.0, 2.0, 2.0);
         let mobjects: Vec<Box<dyn BuiltShape>> = mobjects
             .unwrap_or_default()
             .into_iter()
             .map(|obj| obj.build(&logical_device, physical_device_memory_properties))
             .collect();
+
+        let mobject_descriptor_set_layout = shaders::create_description_set_layout(
+            &logical_device,
+            [
+                DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::TESSELLATION_EVALUATION,
+                    ..Default::default()
+                },
+                DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                },
+            ]
+            .to_vec(),
+        );
+        let mobject_descriptor_pool = shaders::mobject_descriptor_pool(&logical_device);
+        let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
+            .iter()
+            .map(|mob| {
+                let (uniform_buffer, _, _) = mob.get_uniform_buffer();
+                shaders::mobject_descriptor_sets(
+                    &logical_device,
+                    mobject_descriptor_set_layout,
+                    mobject_descriptor_pool,
+                    uniform_buffer,
+                    texture_image_view,
+                    sampler,
+                )
+            })
+            .collect();
+        let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
+            &logical_device,
+            extent,
+            render_pass,
+            scene_descriptor_set_layout,
+            mobject_descriptor_set_layout,
+        );
+        let camera_position = glm::vec3(2.0, 2.0, 2.0);
         Self {
             sync,
             device: logical_device,
@@ -179,7 +227,8 @@ impl Scene {
             _image_memory: image_memory,
             texture_image_view,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
-            descriptor_sets,
+            scene_descriptor_sets,
+            mobject_descriptor_sets,
             extent,
             graphics_pipeline,
             queue_families,
@@ -246,6 +295,10 @@ impl Scene {
             &self.global_ubo,
         );
 
+        self.mobjects.iter().for_each(|mob| {
+            let (_, _, mapped_memory) = mob.get_uniform_buffer();
+            window::fill_uniform_buffer(mapped_memory[current_frame], mob.get_ubo_contents());
+        });
         let (image_index, _suboptimal) = unsafe {
             self.swapchain_device.acquire_next_image(
                 self.swapchain,
@@ -270,7 +323,12 @@ impl Scene {
             image_index,
             self.render_pass,
             &self.framebuffers,
-            self.descriptor_sets[current_frame],
+            self.scene_descriptor_sets[current_frame],
+            self.mobject_descriptor_sets
+                .iter()
+                .map(|dsets| dsets[current_frame])
+                .collect(),
+            &self.mobjects,
             self.extent,
             self.pipeline_layout,
             self.graphics_pipeline,
