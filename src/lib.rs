@@ -146,7 +146,7 @@ impl Scene {
                 binding: 0,
                 descriptor_type: DescriptorType::UNIFORM_BUFFER,
                 descriptor_count: 1,
-                stage_flags: ShaderStageFlags::TESSELLATION_EVALUATION,
+                stage_flags: ShaderStageFlags::VERTEX,
                 ..Default::default()
             }]
             .to_vec(),
@@ -172,7 +172,7 @@ impl Scene {
                     binding: 0,
                     descriptor_type: DescriptorType::UNIFORM_BUFFER,
                     descriptor_count: 1,
-                    stage_flags: ShaderStageFlags::TESSELLATION_EVALUATION,
+                    stage_flags: ShaderStageFlags::VERTEX,
                     ..Default::default()
                 },
                 DescriptorSetLayoutBinding {
@@ -236,6 +236,7 @@ impl Scene {
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
                 camera_position,
+                _pad: 0,
                 view: glm::ext::look_at(
                     camera_position,
                     glm::vec3(0.0, 0.0, 0.0),
@@ -289,7 +290,6 @@ impl Scene {
         let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
         window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
-        // NOTE: transforms here
         window::fill_uniform_buffer(
             self.uniform_buffer_mapped_memories[current_frame],
             &self.global_ubo,
@@ -319,7 +319,6 @@ impl Scene {
             command_buffer,
             vertex_buffer,
             index_buffer,
-            indices.len() as u32,
             image_index,
             self.render_pass,
             &self.framebuffers,

@@ -10,13 +10,16 @@ use std::{char::MAX, mem::offset_of, os::raw::c_void};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers};
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct UBO {
     pub model: glm::Mat4,
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct GlobalUBO {
     pub camera_position: glm::Vec3,
+    pub _pad: u32, // 4 bytes of padding, because std140 rule states vec3 takes 16 bytes...
     pub view: glm::Mat4,
     pub proj: glm::Mat4,
 }
@@ -115,7 +118,7 @@ impl Triangle {
             uniform_mapped_memories: None,
             ubo: UBO {
                 model: glm::mat4(
-                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
                 ),
             },
         }
@@ -193,7 +196,7 @@ impl Rectangle {
             uniform_mapped_memories: None,
             ubo: UBO {
                 model: glm::mat4(
-                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
                 ),
             },
         }
@@ -281,7 +284,7 @@ pub fn mobjects_to_vertices_and_indices(
     let mut vertices: Vec<Vertex2D> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     for i in (0..mobjects.len()) {
-        let current_length = indices.len() as u32;
+        let current_length = vertices.len() as u32;
         let shape_vertices = mobjects[i].vertices2d();
         let shape_indices = mobjects[i].indices();
         shape_vertices.iter().for_each(|f| vertices.push(f.clone()));

@@ -42,7 +42,7 @@ fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
         rasterizer_discard_enable: vk::FALSE,
         polygon_mode: vk::PolygonMode::FILL,
         line_width: 1.0,
-        cull_mode: vk::CullModeFlags::BACK,
+        cull_mode: vk::CullModeFlags::NONE,
         front_face: vk::FrontFace::COUNTER_CLOCKWISE,
         depth_bias_enable: vk::FALSE,
         ..Default::default()
@@ -90,11 +90,11 @@ pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
     let pool_sizes = [
         DescriptorPoolSize {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 10,
+            descriptor_count: 6,
         },
         DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 10,
+            descriptor_count: 6,
         },
     ];
     let pool_info = DescriptorPoolCreateInfo {
@@ -103,7 +103,7 @@ pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
         p_pool_sizes: pool_sizes.as_ptr(),
         // TODO: this should be MAX_FRAMES_IN_FLIGHT * num objects, since those are the
         // amount of times this will be used to allocate descriptor sets
-        max_sets: 10,
+        max_sets: 6,
         ..Default::default()
     };
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
@@ -162,7 +162,6 @@ pub fn mobject_descriptor_sets(
         p_set_layouts: layouts.as_ptr(),
         ..Default::default()
     };
-    dbg!("H");
     let descriptor_setes = unsafe { device.allocate_descriptor_sets(&alloc_info) }.unwrap();
 
     (0..MAX_FRAMES_IN_FLIGHT).for_each(|i| {

@@ -100,7 +100,6 @@ pub fn record_command_buffer(
     buffer: CommandBuffer,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    num_indices: u32,
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
@@ -154,6 +153,7 @@ pub fn record_command_buffer(
         )
     };
     let mut cummulative_indices = 0;
+
     mobject_descriptor_sets
         .iter()
         .zip(mobjects.iter())
@@ -169,10 +169,11 @@ pub fn record_command_buffer(
                     &[],
                 );
             };
-            unsafe { device.cmd_draw_indexed(buffer, num_indices, 0, cummulative_indices, 0, 0) };
+            unsafe { device.cmd_draw_indexed(buffer, 10, 1, 0, 0, 0) };
             cummulative_indices += num_indices;
         });
 
+    unsafe { device.cmd_draw_indexed(buffer, 10, 1, 0, 0, 0) };
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
     unsafe { device.end_command_buffer(buffer) }.unwrap();

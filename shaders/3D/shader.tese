@@ -1,16 +1,5 @@
 #version 450
 layout (triangles, equal_spacing, cw) in;
-
-layout(set = 0, binding = 0) uniform SceneBufferObject {
-  vec3 camera_position;
-  mat4 view;
-  mat4 proj;
-} sbo;
-
-layout(set = 1, binding = 0) uniform UniformBufferObject {
-    mat4 model;
-} ubo;
-
 layout (location = 0) in vec2 textureCoord[];
 layout (location = 1) in vec3 fragmentColors[];
 
@@ -23,5 +12,5 @@ void main() {
   vec4 position = (bary.x * gl_in[0].gl_Position + bary.y * gl_in[1].gl_Position + bary.z * gl_in[2].gl_Position);
   fragColor = (bary.x * fragmentColors[0] + bary.y * fragmentColors[1] + bary.z * fragmentColors[2]);
   fragTexCoord = (bary.x * textureCoord[0] + bary.y * textureCoord[1] + bary.z * textureCoord[2]);
-  gl_Position = sbo.proj * sbo.view * ubo.model * position;
+  gl_Position = position;
 }
