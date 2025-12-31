@@ -169,7 +169,7 @@ pub fn record_command_buffer(
                     &[],
                 );
             };
-            unsafe { device.cmd_draw_indexed(buffer, 10, 1, 0, 0, 0) };
+            unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, cummulative_indices, 0, 0) };
             cummulative_indices += num_indices;
         });
 
