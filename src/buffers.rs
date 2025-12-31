@@ -173,7 +173,6 @@ pub fn record_command_buffer(
             cummulative_indices += num_indices;
         });
 
-    unsafe { device.cmd_draw_indexed(buffer, 10, 1, 0, 0, 0) };
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
     unsafe { device.end_command_buffer(buffer) }.unwrap();
