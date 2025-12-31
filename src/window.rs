@@ -80,9 +80,9 @@ pub fn fill_index_buffer(device: &Device, memory: DeviceMemory, indices: &[u32])
     }
 }
 
-pub fn fill_uniform_buffer(device: &Device, memory_loc: *mut c_void, ubo: &UBO) {
+pub fn fill_uniform_buffer<T>(memory_loc: *mut c_void, ubo: &T) {
     unsafe {
-        let dst = memory_loc as *mut UBO;
-        copy_nonoverlapping(ubo as *const UBO, dst, 1);
+        let dst = memory_loc as *mut T;
+        copy_nonoverlapping(ubo as *const T, dst, 1);
     }
 }

@@ -1,17 +1,19 @@
+use std::array;
 use std::char::MAX;
 use std::ffi::c_void;
 
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
-use crate::shapes::{Shape, UBO, Vertex2D};
+use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
 use ash::Device;
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
     CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Framebuffer, FramebufferCreateInfo, Handle,
-    ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
+    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Framebuffer, FramebufferCreateInfo,
+    Handle, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
     Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint,
-    PipelineLayout, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubpassContents,
+    PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo,
+    SubpassContents,
 };
 
 pub fn create_frame_buffers(
@@ -50,12 +52,12 @@ pub fn create_command_pool(device: &Device, queue_families: &QueueFamilies) -> C
     unsafe { device.create_command_pool(&create_info, None) }.unwrap()
 }
 
-pub fn create_command_buffers(pool: CommandPool, device: &Device) -> Vec<CommandBuffer> {
+pub fn create_command_buffers(pool: CommandPool, device: &Device, num: u32) -> Vec<CommandBuffer> {
     let create_info = CommandBufferAllocateInfo {
         s_type: StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
         command_pool: pool,
         level: vk::CommandBufferLevel::PRIMARY,
-        command_buffer_count: MAX_FRAMES_IN_FLIGHT,
+        command_buffer_count: num,
         ..Default::default()
     };
     // taking the first one since we only created one buffer
@@ -64,16 +66,46 @@ pub fn create_command_buffers(pool: CommandPool, device: &Device) -> Vec<Command
     unsafe { device.allocate_command_buffers(&create_info) }.unwrap()
 }
 
+pub fn begin_single_time_recording(pool: CommandPool, device: &Device) -> CommandBuffer {
+    let command_buffer = create_command_buffers(pool, device, 1)[0];
+    let begin_info = CommandBufferBeginInfo {
+        s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
+        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+        ..Default::default()
+    };
+    unsafe { device.begin_command_buffer(command_buffer, &begin_info) }.unwrap();
+    command_buffer
+}
+
+pub fn end_single_time_recording(
+    device: &Device,
+    buffer: CommandBuffer,
+    queue: Queue,
+    pool: CommandPool,
+) {
+    unsafe { device.end_command_buffer(buffer) }.unwrap();
+    let submit_info = SubmitInfo {
+        s_type: StructureType::SUBMIT_INFO,
+        command_buffer_count: 1,
+        p_command_buffers: &buffer,
+        ..Default::default()
+    };
+    unsafe { device.queue_submit(queue, &[submit_info], Fence::null()) }.unwrap();
+    unsafe { device.queue_wait_idle(queue) }.unwrap();
+    unsafe { device.free_command_buffers(pool, &[buffer]) };
+}
+
 pub fn record_command_buffer(
     device: &Device,
     buffer: CommandBuffer,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    num_indices: u32,
     image_index: u32,
     render_pass: RenderPass,
     framebuffers: &[Framebuffer],
-    descriptor_set: DescriptorSet,
+    scene_descriptor_set: DescriptorSet,
+    mobject_descriptor_sets: Vec<DescriptorSet>,
+    mobjects: &[Box<dyn BuiltShape>],
     extent: Extent2D,
     pipeline_layout: PipelineLayout,
     graphics_pipeline: Pipeline,
@@ -116,11 +148,30 @@ pub fn record_command_buffer(
             PipelineBindPoint::GRAPHICS,
             pipeline_layout,
             0,
-            &[descriptor_set],
+            &[scene_descriptor_set],
             &[],
         )
     };
-    unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, 0, 0, 0) };
+    let mut cummulative_indices = 0;
+
+    mobject_descriptor_sets
+        .iter()
+        .zip(mobjects.iter())
+        .for_each(|(&desc_set, mobj)| {
+            let num_indices = mobj.indices().len() as u32;
+            unsafe {
+                device.cmd_bind_descriptor_sets(
+                    buffer,
+                    PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    1,
+                    &[desc_set],
+                    &[],
+                );
+            };
+            unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, cummulative_indices, 0, 0) };
+            cummulative_indices += num_indices;
+        });
 
     unsafe { device.cmd_end_render_pass(buffer) };
     // end recording command buffer: not necassarily finishing the execution
@@ -167,31 +218,30 @@ pub fn create_index_buffers(
     (buffers, memories)
 }
 
-pub fn create_uniform_buffers(
+pub fn create_uniform_buffers<const N: usize>(
     device: &Device,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>, Vec<*mut c_void>) {
-    let size = size_of::<UBO>() as u64;
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
-            create_buffer(
-                device,
-                size,
-                BufferUsageFlags::UNIFORM_BUFFER,
-                memory_proprties,
-            )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories: Vec<DeviceMemory> = entities.iter().map(|(_, memory)| *memory).collect();
-    let mapped_memories: Vec<*mut c_void> = memories
-        .iter()
-        .map(|&mem| unsafe { device.map_memory(mem, 0, size, MemoryMapFlags::empty()) }.unwrap())
-        .collect();
+    struct_size: u64,
+) -> ([Buffer; N], [DeviceMemory; N], [*mut c_void; N]) {
+    let entities: [(Buffer, DeviceMemory); N] = array::from_fn(|_| {
+        create_buffer(
+            device,
+            struct_size,
+            BufferUsageFlags::UNIFORM_BUFFER,
+            memory_proprties,
+        )
+    });
+    let buffers: [Buffer; N] = array::from_fn(|i| entities[i].0);
+    let memories: [DeviceMemory; N] = array::from_fn(|i| entities[i].1);
+    let mapped_memories: [*mut c_void; N] = array::from_fn(|i| unsafe {
+        device
+            .map_memory(memories[i], 0, struct_size, MemoryMapFlags::empty())
+            .unwrap()
+    });
     (buffers, memories, mapped_memories)
 }
 
-fn create_buffer(
+pub fn create_buffer(
     device: &Device,
     size: DeviceSize,
     usage: BufferUsageFlags,
@@ -214,7 +264,7 @@ fn create_buffer(
     (buffer, memory[0])
 }
 
-fn find_memory_type(
+pub fn find_memory_type(
     memory_proprties: PhysicalDeviceMemoryProperties,
     type_filter: u32,
     properties: MemoryPropertyFlags,

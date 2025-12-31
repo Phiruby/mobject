@@ -149,7 +149,7 @@ pub fn acquire_images(
 pub fn create_image_views(
     logical_device: &Device,
     swapchain_images: &[Image],
-    image_format: SurfaceFormatKHR,
+    image_format: Format,
 ) -> Vec<ImageView> {
     let create_infos: Vec<ImageViewCreateInfo> = swapchain_images
         .iter()
@@ -157,7 +157,7 @@ pub fn create_image_views(
             s_type: StructureType::IMAGE_VIEW_CREATE_INFO,
             image: *img,
             view_type: ImageViewType::TYPE_2D,
-            format: image_format.format,
+            format: image_format,
             components: ComponentMapping {
                 r: ComponentSwizzle::IDENTITY,
                 g: ComponentSwizzle::IDENTITY,

@@ -5,19 +5,22 @@ pub mod render_pass;
 pub mod shaders;
 pub mod shapes;
 pub mod swapchain;
+pub mod texture;
 pub mod transforms;
 pub mod window;
+
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
-    DeviceMemory, Extent2D, Fence, Framebuffer, Handle, InstanceCreateInfo, MemoryPropertyFlags,
-    Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, StructureType, SubmitInfo,
+    DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle,
+    Image, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline,
+    PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo,
     SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
-use shapes::{Shape, UBO};
+use shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::char::MAX;
 use std::ffi::{CString, c_void};
 use std::thread::current;
@@ -38,15 +41,20 @@ pub struct Scene {
     vertex_buffer_memory: Vec<DeviceMemory>,
     index_buffers: Vec<Buffer>,
     index_buffer_memory: Vec<DeviceMemory>,
+    _image: Image,
+    _image_memory: DeviceMemory,
     uniform_buffers: Vec<Buffer>,
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
-    descriptor_sets: Vec<DescriptorSet>,
+    texture_image_view: ImageView,
+    scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+    // TODO: move descriptor sets in a struct with the actual mobject
+    mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
-    mobjects: Vec<Box<dyn Shape>>,
-    ubo: UBO,
+    mobjects: Vec<Box<dyn BuiltShape>>,
+    global_ubo: GlobalUBO,
     pipeline_layout: PipelineLayout,
 }
 
@@ -70,7 +78,12 @@ impl Scene {
             &queue_families,
             &instance,
             physical_device,
-            None,
+            // NOTE: this is needed for texture anisotropy sampling
+            Some(PhysicalDeviceFeatures {
+                sampler_anisotropy: vk::TRUE,
+                tessellation_shader: vk::TRUE,
+                ..Default::default()
+            }),
             Some(DEVICE_EXTENSIONS.to_vec()),
         );
         let swapchain_device = khr::swapchain::Device::new(&instance, &logical_device);
@@ -85,8 +98,11 @@ impl Scene {
         );
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
         println!("{:?} <-- total swapchain images", swapchain_images.len());
-        let swapchain_imageviews =
-            swapchain::create_image_views(&logical_device, &swapchain_images, surface_format);
+        let swapchain_imageviews = swapchain::create_image_views(
+            &logical_device,
+            &swapchain_images,
+            surface_format.format,
+        );
 
         let render_pass = render_pass::create(surface_format, &logical_device);
         let framebuffers = buffers::create_frame_buffers(
@@ -96,33 +112,102 @@ impl Scene {
             extent,
         );
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
-        let command_buffer = buffers::create_command_buffers(pool, &logical_device);
+        let command_buffer =
+            buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
         let sync = window::create_sync_objects(&logical_device);
         // TODO: unhardcode the max 10 vertices
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let graphics_queue =
+            unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
+        let (image, image_memory) = texture::create_texture_image(
+            &logical_device,
+            "textures/basic.jpg",
+            physical_device_memory_properties,
+            pool,
+            graphics_queue,
+        );
+        let texture_image_view = texture::create_texture_image_view(&logical_device, image);
+        let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
         let (vertex_buffers, vertex_buffer_memories) =
             buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
         let (index_buffers, index_buffer_memory) =
             buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
-            buffers::create_uniform_buffers(&logical_device, physical_device_memory_properties);
+            buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
+                &logical_device,
+                physical_device_memory_properties,
+                size_of::<GlobalUBO>() as u64,
+            );
 
-        let descriptor_set_layout = shaders::create_description_set_layout(&logical_device);
-        let descriptor_pool = shaders::create_descriptor_pool(&logical_device);
-        let descriptor_sets = shaders::create_descriptor_sets(
-            descriptor_set_layout,
-            descriptor_pool,
-            &uniform_buffers,
+        let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
+            [DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: ShaderStageFlags::VERTEX,
+                ..Default::default()
+            }]
+            .to_vec(),
+        );
+        let scene_descriptor_pool = shaders::scene_descriptor_pool(&logical_device);
+        let scene_descriptor_sets = shaders::scene_descriptor_sets(
+            &logical_device,
+            scene_descriptor_set_layout,
+            scene_descriptor_pool,
+            &uniform_buffers,
         );
 
+        let mobjects: Vec<Box<dyn BuiltShape>> = mobjects
+            .unwrap_or_default()
+            .into_iter()
+            .map(|obj| obj.build(&logical_device, physical_device_memory_properties))
+            .collect();
+
+        let mobject_descriptor_set_layout = shaders::create_description_set_layout(
+            &logical_device,
+            [
+                DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::VERTEX,
+                    ..Default::default()
+                },
+                DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                },
+            ]
+            .to_vec(),
+        );
+        let mobject_descriptor_pool = shaders::mobject_descriptor_pool(&logical_device);
+        let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
+            .iter()
+            .map(|mob| {
+                let (uniform_buffer, _, _) = mob.get_uniform_buffer();
+                shaders::mobject_descriptor_sets(
+                    &logical_device,
+                    mobject_descriptor_set_layout,
+                    mobject_descriptor_pool,
+                    uniform_buffer,
+                    texture_image_view,
+                    sampler,
+                )
+            })
+            .collect();
         let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
             &logical_device,
             extent,
             render_pass,
-            descriptor_set_layout,
+            scene_descriptor_set_layout,
+            mobject_descriptor_set_layout,
         );
+        let camera_position = glm::vec3(2.0, 2.0, 2.0);
         Self {
             sync,
             device: logical_device,
@@ -136,20 +221,24 @@ impl Scene {
             vertex_buffer_memory: vertex_buffer_memories,
             index_buffers,
             index_buffer_memory,
-            uniform_buffers,
-            uniform_buffer_memories,
-            uniform_buffer_mapped_memories,
-            descriptor_sets,
+            uniform_buffers: uniform_buffers.to_vec(),
+            uniform_buffer_memories: uniform_buffer_memories.to_vec(),
+            _image: image,
+            _image_memory: image_memory,
+            texture_image_view,
+            uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
+            scene_descriptor_sets,
+            mobject_descriptor_sets,
             extent,
             graphics_pipeline,
             queue_families,
-            mobjects: mobjects.unwrap_or_default(),
-            ubo: UBO {
-                model: glm::mat4(
-                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-                ),
+            mobjects,
+            // TODO: projection can even be moved to a constant ubo
+            global_ubo: GlobalUBO {
+                camera_position,
+                _pad: 0,
                 view: glm::ext::look_at(
-                    glm::vec3(2.0, 2.0, 2.0),
+                    camera_position,
                     glm::vec3(0.0, 0.0, 0.0),
                     glm::vec3(0.0, 0.0, 1.0),
                 ),
@@ -166,7 +255,7 @@ impl Scene {
 
     pub fn main_loop(&mut self) {
         // opengl to vulkan conversion (inverted y)
-        self.ubo.proj[1][1] *= -1.0;
+        self.global_ubo.proj[1][1] *= -1.0;
         let graphics_queue = unsafe {
             self.device
                 .get_device_queue(0, self.queue_families.graphics_index as u32)
@@ -201,14 +290,15 @@ impl Scene {
         let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
         window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
         window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
-        // NOTE: transforms here
-        transforms::rotate(&mut self.ubo, 720.0);
         window::fill_uniform_buffer(
-            &self.device,
             self.uniform_buffer_mapped_memories[current_frame],
-            &self.ubo,
+            &self.global_ubo,
         );
 
+        self.mobjects.iter().for_each(|mob| {
+            let (_, _, mapped_memory) = mob.get_uniform_buffer();
+            window::fill_uniform_buffer(mapped_memory[current_frame], mob.get_ubo_contents());
+        });
         let (image_index, _suboptimal) = unsafe {
             self.swapchain_device.acquire_next_image(
                 self.swapchain,
@@ -229,11 +319,15 @@ impl Scene {
             command_buffer,
             vertex_buffer,
             index_buffer,
-            indices.len() as u32,
             image_index,
             self.render_pass,
             &self.framebuffers,
-            self.descriptor_sets[current_frame],
+            self.scene_descriptor_sets[current_frame],
+            self.mobject_descriptor_sets
+                .iter()
+                .map(|dsets| dsets[current_frame])
+                .collect(),
+            &self.mobjects,
             self.extent,
             self.pipeline_layout,
             self.graphics_pipeline,

@@ -622,6 +622,7 @@ dependencies = [
  "dialoguer",
  "glfw",
  "glm",
+ "image",
 ]
 
 [[package]]

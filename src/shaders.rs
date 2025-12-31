@@ -2,15 +2,16 @@ use std::ffi::CString;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo,
-    DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout,
-    DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
-    GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineCache,
+    self, Buffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool,
+    DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
+    GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
     PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
     PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo,
-    PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, ShaderModule,
+    PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags,
+    PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo,
+    PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule,
     ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet,
 };
 
@@ -34,15 +35,6 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
 }
 
-fn input_assembly_info<'a>() -> PipelineInputAssemblyStateCreateInfo<'a> {
-    PipelineInputAssemblyStateCreateInfo {
-        s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        topology: PrimitiveTopology::TRIANGLE_LIST,
-        primitive_restart_enable: vk::FALSE,
-        ..Default::default()
-    }
-}
-
 fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
     PipelineRasterizationStateCreateInfo {
         s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -50,7 +42,7 @@ fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
         rasterizer_discard_enable: vk::FALSE,
         polygon_mode: vk::PolygonMode::FILL,
         line_width: 1.0,
-        cull_mode: vk::CullModeFlags::BACK,
+        cull_mode: vk::CullModeFlags::NONE,
         front_face: vk::FrontFace::COUNTER_CLOCKWISE,
         depth_bias_enable: vk::FALSE,
         ..Default::default()
@@ -66,45 +58,102 @@ fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     }
 }
 
-pub fn create_description_set_layout(device: &Device) -> DescriptorSetLayout {
-    let ubo_layout_binding = DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-        descriptor_count: 1,
-        stage_flags: vk::ShaderStageFlags::VERTEX,
-        p_immutable_samplers: std::ptr::null(),
-        ..Default::default()
-    };
+pub fn create_description_set_layout(
+    device: &Device,
+    bindings: Vec<DescriptorSetLayoutBinding>,
+) -> DescriptorSetLayout {
     let layout_info = DescriptorSetLayoutCreateInfo {
         s_type: StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        binding_count: 1,
-        p_bindings: &ubo_layout_binding,
+        binding_count: bindings.len() as u32,
+        p_bindings: bindings.as_ptr(),
         ..Default::default()
     };
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
-pub fn create_descriptor_pool(device: &Device) -> DescriptorPool {
-    let pool_size = DescriptorPoolSize {
+pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
+    let pool_sizes = DescriptorPoolSize {
         ty: vk::DescriptorType::UNIFORM_BUFFER,
         descriptor_count: MAX_FRAMES_IN_FLIGHT,
     };
     let pool_info = DescriptorPoolCreateInfo {
         s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
         pool_size_count: 1,
-        p_pool_sizes: &pool_size,
+        p_pool_sizes: &pool_sizes,
         max_sets: MAX_FRAMES_IN_FLIGHT,
         ..Default::default()
     };
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
 }
 
-pub fn create_descriptor_sets(
+pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
+    let pool_sizes = [
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 6,
+        },
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 6,
+        },
+    ];
+    let pool_info = DescriptorPoolCreateInfo {
+        s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+        pool_size_count: pool_sizes.len() as u32,
+        p_pool_sizes: pool_sizes.as_ptr(),
+        // TODO: this should be MAX_FRAMES_IN_FLIGHT * num objects, since those are the
+        // amount of times this will be used to allocate descriptor sets
+        max_sets: 6,
+        ..Default::default()
+    };
+    unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
+}
+
+pub fn scene_descriptor_sets(
+    device: &Device,
+    scene_descriptor_set_layout: DescriptorSetLayout,
+    scene_descriptor_pool: DescriptorPool,
+    uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+    let layouts = [scene_descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
+    let alloc_info = DescriptorSetAllocateInfo {
+        s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+        descriptor_pool: scene_descriptor_pool,
+        descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+        p_set_layouts: layouts.as_ptr(),
+        ..Default::default()
+    };
+    let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info) }.unwrap();
+
+    (0..MAX_FRAMES_IN_FLIGHT).for_each(|i| {
+        let buffer_info = DescriptorBufferInfo {
+            buffer: uniform_buffers[i as usize],
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        };
+        let descriptor_writes = [WriteDescriptorSet {
+            s_type: StructureType::WRITE_DESCRIPTOR_SET,
+            dst_set: descriptor_sets[i as usize],
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            p_buffer_info: &buffer_info,
+            ..Default::default()
+        }];
+        unsafe { device.update_descriptor_sets(&descriptor_writes, &[]) };
+    });
+    descriptor_sets.try_into().unwrap()
+}
+
+pub fn mobject_descriptor_sets(
+    device: &Device,
     descriptor_set_layout: DescriptorSetLayout,
     descriptor_pool: DescriptorPool,
-    uniform_buffers: &[Buffer],
-    device: &Device,
-) -> Vec<DescriptorSet> {
+    uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    texture_image_view: ImageView,
+    sampler: Sampler,
+) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
     let layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
     let alloc_info = DescriptorSetAllocateInfo {
         s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -121,32 +170,56 @@ pub fn create_descriptor_sets(
             offset: 0,
             range: vk::WHOLE_SIZE,
         };
-        let descriptor_write = WriteDescriptorSet {
-            s_type: StructureType::WRITE_DESCRIPTOR_SET,
-            dst_set: descriptor_setes[i as usize],
-            dst_binding: 0,
-            dst_array_element: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-            p_buffer_info: &buffer_info,
-            ..Default::default()
+        let image_info = DescriptorImageInfo {
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image_view: texture_image_view,
+            sampler,
         };
-        unsafe { device.update_descriptor_sets(&[descriptor_write], &[]) };
+        let descriptor_writes = [
+            WriteDescriptorSet {
+                s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                dst_set: descriptor_setes[i as usize],
+                dst_binding: 0,
+                dst_array_element: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                p_buffer_info: &buffer_info,
+                ..Default::default()
+            },
+            WriteDescriptorSet {
+                s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                dst_set: descriptor_setes[i as usize],
+                dst_binding: 1,
+                dst_array_element: 0,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                p_image_info: &image_info,
+                ..Default::default()
+            },
+        ];
+        unsafe { device.update_descriptor_sets(&descriptor_writes, &[]) };
     });
-    descriptor_setes
+    descriptor_setes.try_into().unwrap()
 }
 
 pub fn create_graphics_pipeline(
     device: &Device,
     extent: Extent2D,
     render_pass: RenderPass,
-    descriptor_set_layout: DescriptorSetLayout,
+    scene_descriptor_set_layout: DescriptorSetLayout,
+    mobject_descriptor_set_layout: DescriptorSetLayout,
 ) -> (Pipeline, PipelineLayout) {
     let vertex_bytes = std::fs::read("shaders/vert.spv").unwrap();
     let vertex_shader_module = create_shader_module(vertex_bytes, device);
 
     let fragment_bytes = std::fs::read("shaders/frag.spv").unwrap();
     let fragment_shader_module = create_shader_module(fragment_bytes, device);
+
+    let tesc_bytes = std::fs::read("shaders/tes_ctrl.spv").unwrap();
+    let tesc_shader_module = create_shader_module(tesc_bytes, device);
+
+    let tese_bytes = std::fs::read("shaders/tes_eval.spv").unwrap();
+    let tese_shader_module = create_shader_module(tese_bytes, device);
 
     let entrypoint = CString::new("main").unwrap();
     let vertex_stage_info = PipelineShaderStageCreateInfo {
@@ -165,7 +238,23 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let shader_stages = vec![vertex_stage_info, fragment_stage_info];
+    let tesc_info = PipelineShaderStageCreateInfo {
+        s_type: StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage: ShaderStageFlags::TESSELLATION_CONTROL,
+        module: tesc_shader_module,
+        p_name: entrypoint.as_ptr(),
+        ..Default::default()
+    };
+
+    let tese_info = PipelineShaderStageCreateInfo {
+        s_type: StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage: ShaderStageFlags::TESSELLATION_EVALUATION,
+        module: tese_shader_module,
+        p_name: entrypoint.as_ptr(),
+        ..Default::default()
+    };
+
+    let shader_stages = vec![vertex_stage_info, tesc_info, tese_info, fragment_stage_info];
 
     let vertex_input_binding = Vertex2D::binding_description();
     let vertex_attribute_description = Vertex2D::attribute_descriptions();
@@ -177,7 +266,12 @@ pub fn create_graphics_pipeline(
         p_vertex_attribute_descriptions: vertex_attribute_description.as_ptr(),
         ..Default::default()
     };
-    let input_assembly_info = input_assembly_info();
+    let input_assembly_info = PipelineInputAssemblyStateCreateInfo {
+        s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        topology: PrimitiveTopology::PATCH_LIST,
+        primitive_restart_enable: vk::FALSE,
+        ..Default::default()
+    };
     let viewport = Viewport {
         x: 0.0,
         y: 0.0,
@@ -216,18 +310,25 @@ pub fn create_graphics_pipeline(
         ..Default::default()
     };
 
+    let descriptor_set_layouts = [scene_descriptor_set_layout, mobject_descriptor_set_layout];
     let pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-        set_layout_count: 1,
-        p_set_layouts: &descriptor_set_layout,
+        set_layout_count: descriptor_set_layouts.len() as u32,
+        p_set_layouts: descriptor_set_layouts.as_ptr(),
         ..Default::default()
     };
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }.unwrap();
 
+    let tesselation_info = PipelineTessellationStateCreateInfo {
+        s_type: StructureType::PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+        flags: PipelineTessellationStateCreateFlags::empty(),
+        patch_control_points: 3,
+        ..Default::default()
+    };
     let pipeline_crate_info = GraphicsPipelineCreateInfo {
         s_type: StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
-        stage_count: 2,
+        stage_count: shader_stages.len() as u32,
         p_stages: shader_stages.as_ptr(),
         p_vertex_input_state: &vertex_input_info,
         p_input_assembly_state: &input_assembly_info,
@@ -236,6 +337,7 @@ pub fn create_graphics_pipeline(
         p_multisample_state: &multisample_info,
         p_color_blend_state: &color_blend_info,
         p_depth_stencil_state: std::ptr::null(),
+        p_tessellation_state: &tesselation_info,
         layout: pipeline_layout,
         render_pass,
         subpass: 0,
