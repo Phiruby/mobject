@@ -119,17 +119,23 @@ impl Scene {
             unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
         let (image, image_memory) = texture::create_texture_image(
             &logical_device,
-            "textures/basic.jpg",
+            "textures/viking_room.png",
             physical_device_memory_properties,
             pool,
             graphics_queue,
         );
         let texture_image_view = texture::create_texture_image_view(&logical_device, image);
         let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
-        let (vertex_buffers, vertex_buffer_memories) =
-            buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
-        let (index_buffers, index_buffer_memory) =
-            buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
+        let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(
+            &logical_device,
+            60_000,
+            physical_device_memory_properties,
+        );
+        let (index_buffers, index_buffer_memory) = buffers::create_index_buffers(
+            &logical_device,
+            60_000,
+            physical_device_memory_properties,
+        );
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 &logical_device,
@@ -197,7 +203,8 @@ impl Scene {
             ]
             .to_vec(),
         );
-        let mobject_descriptor_pool = shaders::mobject_descriptor_pool(&logical_device);
+        let mobject_descriptor_pool =
+            shaders::mobject_descriptor_pool(&logical_device, mobjects.len() as u32);
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
             .iter()
             .map(|mob| {
