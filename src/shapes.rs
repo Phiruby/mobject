@@ -4,7 +4,8 @@ use ash::vk::{
     self, Buffer, DeviceMemory, PhysicalDeviceMemoryProperties, VertexInputAttributeDescription,
     VertexInputBindingDescription,
 };
-use glm::{Vec2, Vec3};
+use nalgebra_glm as glm;
+use nalgebra_glm::{Vec2, Vec3};
 use std::{char::MAX, mem::offset_of, os::raw::c_void};
 
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers};
@@ -172,9 +173,9 @@ impl BuiltShape for Triangle {
 impl Default for Triangle {
     fn default() -> Self {
         Self::new(vec![
-            Vertex2D::new(Vec3::new(0.0, -0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), None),
-            Vertex2D::new(Vec3::new(0.5, 0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), None),
-            Vertex2D::new(Vec3::new(-0.5, 0.5, -0.5), Vec3::new(0.0, 0.0, 1.0), None),
+            Vertex2D::new(Vec3::new(0.0, -0.5, 0.25), Vec3::new(1.0, 0.0, 0.0), None),
+            Vertex2D::new(Vec3::new(0.5, 0.5, 0.25), Vec3::new(0.0, 1.0, 0.0), None),
+            Vertex2D::new(Vec3::new(-0.5, 0.5, 0.25), Vec3::new(0.0, 0.0, 1.0), None),
         ])
     }
 }

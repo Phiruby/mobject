@@ -20,10 +20,10 @@ use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
+use nalgebra_glm as glm;
 use shapes::{BuiltShape, GlobalUBO, Shape, UBO};
-use std::char::MAX;
 use std::ffi::{CString, c_void};
-use std::thread::current;
+
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 // TODO: set to num swapchain images instead of hardcoding to my machine
@@ -220,6 +220,9 @@ impl Scene {
             mobject_descriptor_set_layout,
         );
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
+        let origin = glm::vec3(0.0, 0.0, 0.0);
+        let up = glm::vec3(0.0, 0.0, 1.0);
+        let angle = glm::vec1(45.0);
         Self {
             sync,
             device: logical_device,
@@ -252,14 +255,10 @@ impl Scene {
             global_ubo: GlobalUBO {
                 camera_position,
                 _pad: 0,
-                view: glm::ext::look_at(
-                    camera_position,
-                    glm::vec3(0.0, 0.0, 0.0),
-                    glm::vec3(0.0, 0.0, 1.0),
-                ),
-                proj: (glm::ext::perspective(
-                    glm::radians(45.0),
+                view: glm::look_at(&camera_position, &origin, &up),
+                proj: (glm::perspective_zo(
                     (extent.width / extent.height) as f32,
+                    glm::radians(&angle).x,
                     0.1,
                     10.0,
                 )),
@@ -270,7 +269,7 @@ impl Scene {
 
     pub fn main_loop(&mut self) {
         // opengl to vulkan conversion (inverted y)
-        self.global_ubo.proj[1][1] *= -1.0;
+        self.global_ubo.proj.m22 *= -1.0;
         let graphics_queue = unsafe {
             self.device
                 .get_device_queue(0, self.queue_families.graphics_index as u32)
