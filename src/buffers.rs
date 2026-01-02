@@ -2,19 +2,20 @@ use std::array;
 use std::char::MAX;
 use std::ffi::c_void;
 
-use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
-use ash::Device;
+use crate::{MAX_FRAMES_IN_FLIGHT, swapchain, texture};
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
     CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Framebuffer, FramebufferCreateInfo,
-    Handle, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
-    Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint,
-    PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo,
-    SubpassContents,
+    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Format, FormatFeatureFlags,
+    Framebuffer, FramebufferCreateInfo, Handle, Image, ImageAspectFlags, ImageTiling,
+    ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags,
+    MemoryRequirements, Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline,
+    PipelineBindPoint, PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo,
+    StructureType, SubmitInfo, SubpassContents,
 };
+use ash::{Device, Instance};
 
 pub fn create_frame_buffers(
     device: &Device,
@@ -276,6 +277,63 @@ pub fn find_memory_type(
                     == properties)
         })
         .unwrap()
+}
+
+fn find_depth_buffer_format(
+    instance: &Instance,
+    physical_device: PhysicalDevice,
+    candidates: Vec<Format>,
+    tiling: ImageTiling,
+    features: FormatFeatureFlags,
+) -> Format {
+    candidates
+        .into_iter()
+        .find(|&candidate| {
+            let props = unsafe {
+                instance.get_physical_device_format_properties(physical_device, candidate)
+            };
+            ((tiling == ImageTiling::LINEAR && (props.linear_tiling_features.intersects(features)))
+                || (tiling == ImageTiling::OPTIMAL
+                    && (props.optimal_tiling_features.intersects(features))))
+        })
+        .expect("Could not find a format for depth buffer")
+}
+
+pub fn create_depth_buffer(
+    instance: &Instance,
+    logical_device: &Device,
+    physical_device: PhysicalDevice,
+    extent: Extent2D,
+    physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+) -> (Image, ImageView, DeviceMemory) {
+    let depth_format = find_depth_buffer_format(
+        instance,
+        physical_device,
+        vec![
+            Format::D32_SFLOAT,
+            Format::D32_SFLOAT_S8_UINT,
+            Format::D24_UNORM_S8_UINT,
+        ],
+        ImageTiling::OPTIMAL,
+        FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+    );
+    let (image, image_memory) = texture::create_image(
+        logical_device,
+        extent.width,
+        extent.height,
+        depth_format,
+        ImageTiling::OPTIMAL,
+        ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        MemoryPropertyFlags::DEVICE_LOCAL,
+        physical_device_memory_properties,
+    );
+    let image_view = swapchain::create_image_views(
+        logical_device,
+        &[image],
+        depth_format,
+        ImageAspectFlags::DEPTH,
+    )[0];
+    (image, image_view, image_memory)
 }
 
 fn allocate_vertex_buffers_memory(

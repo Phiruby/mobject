@@ -12,9 +12,9 @@ pub mod window;
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
     DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle,
-    Image, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline,
-    PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo,
-    SurfaceKHR, SwapchainKHR,
+    Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags,
+    PhysicalDeviceFeatures, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass,
+    ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
@@ -47,6 +47,9 @@ pub struct Scene {
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
     texture_image_view: ImageView,
+    depth_image: Image,
+    depth_image_view: ImageView,
+    depth_image_memory: DeviceMemory,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // TODO: move descriptor sets in a struct with the actual mobject
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -102,6 +105,7 @@ impl Scene {
             &logical_device,
             &swapchain_images,
             surface_format.format,
+            ImageAspectFlags::COLOR,
         );
 
         let render_pass = render_pass::create(surface_format, &logical_device);
@@ -139,6 +143,13 @@ impl Scene {
                 physical_device_memory_properties,
                 size_of::<GlobalUBO>() as u64,
             );
+        let (depth_image, depth_image_view, depth_image_memory) = buffers::create_depth_buffer(
+            &instance,
+            &logical_device,
+            physical_device,
+            extent,
+            physical_device_memory_properties,
+        );
 
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
@@ -226,6 +237,9 @@ impl Scene {
             _image: image,
             _image_memory: image_memory,
             texture_image_view,
+            depth_image,
+            depth_image_view,
+            depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             mobject_descriptor_sets,

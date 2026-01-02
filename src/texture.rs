@@ -20,7 +20,7 @@ fn load_image(path: &str) -> RgbaImage {
         .into_rgba8()
 }
 
-fn create_image(
+pub fn create_image(
     device: &Device,
     width: u32,
     height: u32,
@@ -226,7 +226,12 @@ pub fn create_texture_image(
 
 pub fn create_texture_image_view(device: &Device, image: Image) -> ImageView {
     // taking the first since only one image created
-    swapchain::create_image_views(device, &[image], Format::R8G8B8A8_SRGB)[0]
+    swapchain::create_image_views(
+        device,
+        &[image],
+        Format::R8G8B8A8_SRGB,
+        ImageAspectFlags::COLOR,
+    )[0]
 }
 
 pub fn create_sampler(

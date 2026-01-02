@@ -27,17 +27,17 @@ pub struct GlobalUBO {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Vertex2D {
-    position: Vec2,
+    position: Vec3,
     color: Vec3,
     tex_coord: Vec2,
 }
 
 impl Vertex2D {
-    pub fn new(position: Vec2, color: Vec3, tex_coord: Option<Vec2>) -> Self {
+    pub fn new(position: Vec3, color: Vec3, tex_coord: Option<Vec2>) -> Self {
         Self {
             position,
             color,
-            tex_coord: tex_coord.unwrap_or(position),
+            tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
         }
     }
     pub fn binding_description() -> VertexInputBindingDescription {
@@ -53,7 +53,7 @@ impl Vertex2D {
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 0,
-                format: vk::Format::R32G32_SFLOAT,
+                format: vk::Format::R32G32B32_SFLOAT,
                 offset: offset_of!(Vertex2D, position) as u32,
             },
             VertexInputAttributeDescription {
@@ -65,7 +65,7 @@ impl Vertex2D {
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
-                format: vk::Format::R32G32B32_SFLOAT,
+                format: vk::Format::R32G32_SFLOAT,
                 offset: offset_of!(Vertex2D, tex_coord) as u32,
             },
         ]
@@ -172,10 +172,24 @@ impl BuiltShape for Triangle {
 impl Default for Triangle {
     fn default() -> Self {
         Self::new(vec![
-            Vertex2D::new(Vec2::new(0.0, -0.5), Vec3::new(1.0, 0.0, 0.0), None),
-            Vertex2D::new(Vec2::new(0.5, 0.5), Vec3::new(0.0, 1.0, 0.0), None),
-            Vertex2D::new(Vec2::new(-0.5, 0.5), Vec3::new(0.0, 0.0, 1.0), None),
+            Vertex2D::new(Vec3::new(0.0, -0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), None),
+            Vertex2D::new(Vec3::new(0.5, 0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), None),
+            Vertex2D::new(Vec3::new(-0.5, 0.5, -0.5), Vec3::new(0.0, 0.0, 1.0), None),
         ])
+    }
+}
+
+pub struct Sphere {
+    vertices: Vec<Vertex2D>,
+    uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
+    uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
+    uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
+    ubo: UBO,
+}
+
+impl Sphere {
+    pub fn new(origin: glm::Vec3, radius: f32) -> Self {
+        todo!()
     }
 }
 
@@ -230,22 +244,22 @@ impl Default for Rectangle {
     fn default() -> Self {
         Self::new([
             Vertex2D::new(
-                Vec2::new(-0.25, -0.25),
+                Vec3::new(-0.25, -0.25, 0.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 Some(Vec2::new(0.0, 0.0)),
             ),
             Vertex2D::new(
-                Vec2::new(0.25, -0.25),
+                Vec3::new(0.25, -0.25, 0.0),
                 Vec3::new(0.0, 1.0, 0.0),
                 Some(Vec2::new(1.0, 0.0)),
             ),
             Vertex2D::new(
-                Vec2::new(0.25, 0.25),
+                Vec3::new(0.25, 0.25, 0.0),
                 Vec3::new(0.0, 0.0, 1.0),
                 Some(Vec2::new(1.0, 1.0)),
             ),
             Vertex2D::new(
-                Vec2::new(-0.25, 0.25),
+                Vec3::new(-0.25, 0.25, 0.0),
                 Vec3::new(1.0, 1.0, 1.0),
                 Some(Vec2::new(0.0, 1.0)),
             ),
