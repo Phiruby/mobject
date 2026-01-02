@@ -108,13 +108,6 @@ impl Scene {
             ImageAspectFlags::COLOR,
         );
 
-        let render_pass = render_pass::create(surface_format, &logical_device);
-        let framebuffers = buffers::create_frame_buffers(
-            &logical_device,
-            render_pass,
-            &swapchain_imageviews,
-            extent,
-        );
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
         let command_buffer =
             buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
@@ -143,14 +136,22 @@ impl Scene {
                 physical_device_memory_properties,
                 size_of::<GlobalUBO>() as u64,
             );
-        let (depth_image, depth_image_view, depth_image_memory) = buffers::create_depth_buffer(
-            &instance,
+        let (depth_image, depth_image_view, depth_image_memory, depth_image_format) =
+            buffers::create_depth_buffer(
+                &instance,
+                &logical_device,
+                physical_device,
+                extent,
+                physical_device_memory_properties,
+            );
+        let render_pass = render_pass::create(surface_format, &logical_device, depth_image_format);
+        let framebuffers = buffers::create_frame_buffers(
             &logical_device,
-            physical_device,
+            render_pass,
+            &swapchain_imageviews,
+            depth_image_view,
             extent,
-            physical_device_memory_properties,
         );
-
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [DescriptorSetLayoutBinding {

@@ -6,29 +6,35 @@ use crate::device::{self, QueueFamilies};
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, swapchain, texture};
 use ash::vk::{
-    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
-    CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Format, FormatFeatureFlags,
-    Framebuffer, FramebufferCreateInfo, Handle, Image, ImageAspectFlags, ImageTiling,
-    ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags,
-    MemoryRequirements, Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline,
-    PipelineBindPoint, PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo,
-    StructureType, SubmitInfo, SubpassContents,
+    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearDepthStencilValue,
+    ClearValue, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool,
+    CommandPoolCreateInfo, DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Format,
+    FormatFeatureFlags, Framebuffer, FramebufferCreateInfo, Handle, Image, ImageAspectFlags,
+    ImageTiling, ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags,
+    MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
+    PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, Queue, Rect2D,
+    RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo, SubpassContents,
 };
 use ash::{Device, Instance};
 
 pub fn create_frame_buffers(
     device: &Device,
     render_pass: RenderPass,
-    image_views: &[ImageView],
+    swapchain_image_views: &[ImageView],
+    depth_image: ImageView,
     extent: Extent2D,
 ) -> Vec<Framebuffer> {
-    let framebuffer_infos: Vec<FramebufferCreateInfo> = image_views
+    // preserving attachments until `create_frame_buffers` is called
+    let attachments: Vec<[ImageView; 2]> = swapchain_image_views
         .iter()
-        .map(|view| FramebufferCreateInfo {
+        .map(|img| [*img, depth_image])
+        .collect();
+    let framebuffer_infos: Vec<FramebufferCreateInfo> = attachments
+        .iter()
+        .map(|attachments| FramebufferCreateInfo {
             s_type: StructureType::FRAMEBUFFER_CREATE_INFO,
-            attachment_count: 1,
-            p_attachments: view as *const ImageView,
+            attachment_count: attachments.len() as u32,
+            p_attachments: attachments.as_ptr(),
             width: extent.width,
             height: extent.height,
             layers: 1,
@@ -39,7 +45,7 @@ pub fn create_frame_buffers(
 
     framebuffer_infos
         .iter()
-        .map(|info| unsafe { device.create_framebuffer(info, None) }.unwrap())
+        .map(|(info)| unsafe { device.create_framebuffer(info, None) }.unwrap())
         .collect::<Vec<Framebuffer>>()
 }
 
@@ -116,11 +122,19 @@ pub fn record_command_buffer(
         ..Default::default()
     };
     unsafe { device.begin_command_buffer(buffer, &command_begin_info) }.unwrap();
-    let clear_color = ClearValue {
-        color: ClearColorValue {
-            float32: [0.0, 0.0, 0.0, 0.0],
+    let clear_colors = [
+        ClearValue {
+            color: ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 0.0],
+            },
         },
-    };
+        ClearValue {
+            depth_stencil: ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0,
+            },
+        },
+    ];
     let render_pass_begin_info = RenderPassBeginInfo {
         s_type: StructureType::RENDER_PASS_BEGIN_INFO,
         render_pass,
@@ -129,8 +143,8 @@ pub fn record_command_buffer(
             offset: Offset2D { x: 0, y: 0 },
             extent,
         },
-        clear_value_count: 1,
-        p_clear_values: &clear_color,
+        clear_value_count: clear_colors.len() as u32,
+        p_clear_values: clear_colors.as_ptr(),
         ..Default::default()
     };
     unsafe {
@@ -305,7 +319,7 @@ pub fn create_depth_buffer(
     physical_device: PhysicalDevice,
     extent: Extent2D,
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
-) -> (Image, ImageView, DeviceMemory) {
+) -> (Image, ImageView, DeviceMemory, Format) {
     let depth_format = find_depth_buffer_format(
         instance,
         physical_device,
@@ -333,7 +347,7 @@ pub fn create_depth_buffer(
         depth_format,
         ImageAspectFlags::DEPTH,
     )[0];
-    (image, image_view, image_memory)
+    (image, image_view, image_memory, depth_format)
 }
 
 fn allocate_vertex_buffers_memory(
