@@ -104,6 +104,7 @@ impl Scene {
         let swapchain_imageviews = swapchain::create_image_views(
             &logical_device,
             &swapchain_images,
+            1,
             surface_format.format,
             ImageAspectFlags::COLOR,
         );
@@ -117,14 +118,15 @@ impl Scene {
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let graphics_queue =
             unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
-        let (image, image_memory) = texture::create_texture_image(
+        let (image, image_memory, mip_levels) = texture::create_texture_image(
             &logical_device,
             "textures/viking_room.png",
             physical_device_memory_properties,
             pool,
             graphics_queue,
         );
-        let texture_image_view = texture::create_texture_image_view(&logical_device, image);
+        let texture_image_view =
+            texture::create_texture_image_view(&logical_device, image, mip_levels);
         let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
         let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(
             &logical_device,

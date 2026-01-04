@@ -335,6 +335,7 @@ pub fn create_depth_buffer(
         logical_device,
         extent.width,
         extent.height,
+        1,
         depth_format,
         ImageTiling::OPTIMAL,
         ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
@@ -344,6 +345,7 @@ pub fn create_depth_buffer(
     let image_view = swapchain::create_image_views(
         logical_device,
         &[image],
+        1,
         depth_format,
         ImageAspectFlags::DEPTH,
     )[0];
