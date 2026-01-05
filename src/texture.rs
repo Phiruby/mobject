@@ -179,7 +179,7 @@ pub fn create_texture_image(
 ) -> (Image, DeviceMemory, u32) {
     let pixels = load_image(image_path);
     let (width, height) = pixels.dimensions();
-    let mip_levels = std::cmp::max(width, height).ilog2();
+    let mip_levels = std::cmp::max(width, height).ilog2() + 1;
     let size = width * height * 4; // 4 channels; one byte each
     let (buffer, memory) = buffers::create_buffer(
         device,
@@ -309,7 +309,7 @@ fn generate_mipmaps(
     };
     let mut mip_width = tex_width;
     let mut mip_height = tex_height;
-    for i in (0..mip_levels) {
+    for i in (1..mip_levels) {
         barrier.subresource_range.base_mip_level = i - 1;
         barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
         barrier.new_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
@@ -328,14 +328,28 @@ fn generate_mipmaps(
             );
         };
         let blit = ImageBlit {
-            src_offsets: [Offset3D { x: 0, y: 0, z: 0 }, Offset3D { x: 0, y: 0, z: 0 }],
+            src_offsets: [
+                Offset3D { x: 0, y: 0, z: 0 },
+                Offset3D {
+                    x: mip_width as i32,
+                    y: mip_height as i32,
+                    z: 1,
+                },
+            ],
             src_subresource: ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 mip_level: i - 1,
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            dst_offsets: [Offset3D { x: 0, y: 0, z: 0 }, Offset3D { x: 0, y: 0, z: 0 }],
+            dst_offsets: [
+                Offset3D { x: 0, y: 0, z: 0 },
+                Offset3D {
+                    x: if mip_width > 1 { mip_width / 2 } else { 1 } as i32,
+                    y: if mip_height > 1 { mip_height / 2 } else { 1 } as i32,
+                    z: 1,
+                },
+            ],
             dst_subresource: ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 mip_level: i,
