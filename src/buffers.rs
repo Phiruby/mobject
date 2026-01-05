@@ -2,32 +2,39 @@ use std::array;
 use std::char::MAX;
 use std::ffi::c_void;
 
-use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::device::{self, QueueFamilies};
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
-use ash::Device;
+use crate::{MAX_FRAMES_IN_FLIGHT, swapchain, texture};
 use ash::vk::{
-    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearValue, CommandBuffer,
-    CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool, CommandPoolCreateInfo,
-    DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Framebuffer, FramebufferCreateInfo,
-    Handle, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements,
-    Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint,
-    PipelineLayout, Queue, Rect2D, RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo,
-    SubpassContents,
+    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearDepthStencilValue,
+    ClearValue, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool,
+    CommandPoolCreateInfo, DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Format,
+    FormatFeatureFlags, Framebuffer, FramebufferCreateInfo, Handle, Image, ImageAspectFlags,
+    ImageTiling, ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags,
+    MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
+    PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, Queue, Rect2D,
+    RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo, SubpassContents,
 };
+use ash::{Device, Instance};
 
 pub fn create_frame_buffers(
     device: &Device,
     render_pass: RenderPass,
-    image_views: &[ImageView],
+    swapchain_image_views: &[ImageView],
+    depth_image: ImageView,
     extent: Extent2D,
 ) -> Vec<Framebuffer> {
-    let framebuffer_infos: Vec<FramebufferCreateInfo> = image_views
+    // preserving attachments until `create_frame_buffers` is called
+    let attachments: Vec<[ImageView; 2]> = swapchain_image_views
         .iter()
-        .map(|view| FramebufferCreateInfo {
+        .map(|img| [*img, depth_image])
+        .collect();
+    let framebuffer_infos: Vec<FramebufferCreateInfo> = attachments
+        .iter()
+        .map(|attachments| FramebufferCreateInfo {
             s_type: StructureType::FRAMEBUFFER_CREATE_INFO,
-            attachment_count: 1,
-            p_attachments: view as *const ImageView,
+            attachment_count: attachments.len() as u32,
+            p_attachments: attachments.as_ptr(),
             width: extent.width,
             height: extent.height,
             layers: 1,
@@ -38,7 +45,7 @@ pub fn create_frame_buffers(
 
     framebuffer_infos
         .iter()
-        .map(|info| unsafe { device.create_framebuffer(info, None) }.unwrap())
+        .map(|(info)| unsafe { device.create_framebuffer(info, None) }.unwrap())
         .collect::<Vec<Framebuffer>>()
 }
 
@@ -115,11 +122,19 @@ pub fn record_command_buffer(
         ..Default::default()
     };
     unsafe { device.begin_command_buffer(buffer, &command_begin_info) }.unwrap();
-    let clear_color = ClearValue {
-        color: ClearColorValue {
-            float32: [0.0, 0.0, 0.0, 0.0],
+    let clear_colors = [
+        ClearValue {
+            color: ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 0.0],
+            },
         },
-    };
+        ClearValue {
+            depth_stencil: ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0,
+            },
+        },
+    ];
     let render_pass_begin_info = RenderPassBeginInfo {
         s_type: StructureType::RENDER_PASS_BEGIN_INFO,
         render_pass,
@@ -128,8 +143,8 @@ pub fn record_command_buffer(
             offset: Offset2D { x: 0, y: 0 },
             extent,
         },
-        clear_value_count: 1,
-        p_clear_values: &clear_color,
+        clear_value_count: clear_colors.len() as u32,
+        p_clear_values: clear_colors.as_ptr(),
         ..Default::default()
     };
     unsafe {
@@ -276,6 +291,65 @@ pub fn find_memory_type(
                     == properties)
         })
         .unwrap()
+}
+
+fn find_depth_buffer_format(
+    instance: &Instance,
+    physical_device: PhysicalDevice,
+    candidates: Vec<Format>,
+    tiling: ImageTiling,
+    features: FormatFeatureFlags,
+) -> Format {
+    candidates
+        .into_iter()
+        .find(|&candidate| {
+            let props = unsafe {
+                instance.get_physical_device_format_properties(physical_device, candidate)
+            };
+            ((tiling == ImageTiling::LINEAR && (props.linear_tiling_features.intersects(features)))
+                || (tiling == ImageTiling::OPTIMAL
+                    && (props.optimal_tiling_features.intersects(features))))
+        })
+        .expect("Could not find a format for depth buffer")
+}
+
+pub fn create_depth_buffer(
+    instance: &Instance,
+    logical_device: &Device,
+    physical_device: PhysicalDevice,
+    extent: Extent2D,
+    physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+) -> (Image, ImageView, DeviceMemory, Format) {
+    let depth_format = find_depth_buffer_format(
+        instance,
+        physical_device,
+        vec![
+            Format::D32_SFLOAT,
+            Format::D32_SFLOAT_S8_UINT,
+            Format::D24_UNORM_S8_UINT,
+        ],
+        ImageTiling::OPTIMAL,
+        FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+    );
+    let (image, image_memory) = texture::create_image(
+        logical_device,
+        extent.width,
+        extent.height,
+        1,
+        depth_format,
+        ImageTiling::OPTIMAL,
+        ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        MemoryPropertyFlags::DEVICE_LOCAL,
+        physical_device_memory_properties,
+    );
+    let image_view = swapchain::create_image_views(
+        logical_device,
+        &[image],
+        1,
+        depth_format,
+        ImageAspectFlags::DEPTH,
+    )[0];
+    (image, image_view, image_memory, depth_format)
 }
 
 fn allocate_vertex_buffers_memory(

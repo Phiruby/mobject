@@ -149,7 +149,9 @@ pub fn acquire_images(
 pub fn create_image_views(
     logical_device: &Device,
     swapchain_images: &[Image],
+    mip_levels: u32,
     image_format: Format,
+    aspect_flags: ImageAspectFlags,
 ) -> Vec<ImageView> {
     let create_infos: Vec<ImageViewCreateInfo> = swapchain_images
         .iter()
@@ -165,9 +167,9 @@ pub fn create_image_views(
                 a: ComponentSwizzle::IDENTITY,
             },
             subresource_range: ImageSubresourceRange {
-                aspect_mask: ImageAspectFlags::COLOR,
+                aspect_mask: aspect_flags,
                 base_mip_level: 0,
-                level_count: 1,
+                level_count: mip_levels,
                 base_array_layer: 0,
                 layer_count: 1,
             },

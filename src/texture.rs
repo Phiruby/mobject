@@ -1,5 +1,6 @@
 use crate::buffers;
 use crate::swapchain;
+use ash::vk::ImageBlit;
 use ash::vk::Sampler;
 use ash::vk::SamplerCreateInfo;
 use ash::vk::{
@@ -20,10 +21,11 @@ fn load_image(path: &str) -> RgbaImage {
         .into_rgba8()
 }
 
-fn create_image(
+pub fn create_image(
     device: &Device,
     width: u32,
     height: u32,
+    mip_levels: u32,
     format: Format,
     tiling: ImageTiling,
     image_usage: ImageUsageFlags,
@@ -38,7 +40,7 @@ fn create_image(
             height,
             depth: 1,
         },
-        mip_levels: 1,
+        mip_levels,
         format,
         tiling,
         initial_layout: vk::ImageLayout::UNDEFINED,
@@ -69,6 +71,7 @@ fn transition_image_layout(
     device: &Device,
     pool: vk::CommandPool,
     image: Image,
+    mip_levels: u32,
     format: Format,
     old_layout: ImageLayout,
     new_layout: ImageLayout,
@@ -86,7 +89,7 @@ fn transition_image_layout(
         subresource_range: ImageSubresourceRange {
             aspect_mask: ImageAspectFlags::COLOR,
             base_mip_level: 0,
-            level_count: 1,
+            level_count: mip_levels,
             base_array_layer: 0,
             layer_count: 1,
         },
@@ -173,9 +176,10 @@ pub fn create_texture_image(
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     pool: CommandPool,
     graphics_queue: Queue,
-) -> (Image, DeviceMemory) {
+) -> (Image, DeviceMemory, u32) {
     let pixels = load_image(image_path);
     let (width, height) = pixels.dimensions();
+    let mip_levels = std::cmp::max(width, height).ilog2() + 1;
     let size = width * height * 4; // 4 channels; one byte each
     let (buffer, memory) = buffers::create_buffer(
         device,
@@ -194,9 +198,12 @@ pub fn create_texture_image(
         device,
         width,
         height,
+        mip_levels,
         vk::Format::R8G8B8A8_SRGB,
         vk::ImageTiling::OPTIMAL,
-        ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+        ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::TRANSFER_SRC
+            | vk::ImageUsageFlags::SAMPLED,
         MemoryPropertyFlags::DEVICE_LOCAL,
         physical_device_memory_properties,
     );
@@ -204,29 +211,46 @@ pub fn create_texture_image(
         device,
         pool,
         image,
+        mip_levels,
         Format::R8G8B8A8_SRGB,
         ImageLayout::UNDEFINED,
         ImageLayout::TRANSFER_DST_OPTIMAL,
         graphics_queue,
     );
     copy_buffer_to_image(device, pool, buffer, image, width, height, graphics_queue);
-    transition_image_layout(
-        device,
+    generate_mipmaps(
         pool,
+        device,
         image,
-        Format::R8G8B8A8_SRGB,
-        ImageLayout::TRANSFER_DST_OPTIMAL,
-        ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         graphics_queue,
+        width,
+        height,
+        mip_levels,
     );
+    // transition_image_layout(
+    //     device,
+    //     pool,
+    //     image,
+    //     mip_levels,
+    //     Format::R8G8B8A8_SRGB,
+    //     ImageLayout::TRANSFER_DST_OPTIMAL,
+    //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    //     graphics_queue,
+    // );
     unsafe { device.destroy_buffer(buffer, None) };
     unsafe { device.free_memory(memory, None) };
-    (image, image_memory)
+    (image, image_memory, mip_levels)
 }
 
-pub fn create_texture_image_view(device: &Device, image: Image) -> ImageView {
+pub fn create_texture_image_view(device: &Device, image: Image, mip_levels: u32) -> ImageView {
     // taking the first since only one image created
-    swapchain::create_image_views(device, &[image], Format::R8G8B8A8_SRGB)[0]
+    swapchain::create_image_views(
+        device,
+        &[image],
+        mip_levels,
+        Format::R8G8B8A8_SRGB,
+        ImageAspectFlags::COLOR,
+    )[0]
 }
 
 pub fn create_sampler(
@@ -251,9 +275,143 @@ pub fn create_sampler(
         mipmap_mode: vk::SamplerMipmapMode::LINEAR,
         mip_lod_bias: 0.0,
         min_lod: 0.0,
-        max_lod: 0.0,
+        max_lod: vk::LOD_CLAMP_NONE,
         ..Default::default()
     };
 
     unsafe { logical_device.create_sampler(&sampler_info, None) }.unwrap()
+}
+
+fn generate_mipmaps(
+    pool: CommandPool,
+    device: &Device,
+    image: Image,
+    graphics_queue: Queue,
+    tex_width: u32,
+    tex_height: u32,
+    mip_levels: u32,
+) {
+    let command_buffer = buffers::begin_single_time_recording(pool, device);
+
+    let mut barrier = ImageMemoryBarrier {
+        s_type: StructureType::IMAGE_MEMORY_BARRIER,
+        image,
+        src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        subresource_range: ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut mip_width = tex_width;
+    let mut mip_height = tex_height;
+    for i in (1..mip_levels) {
+        barrier.subresource_range.base_mip_level = i - 1;
+        barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+        barrier.new_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+        barrier.dst_access_mask = vk::AccessFlags::TRANSFER_READ;
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+        };
+        let blit = ImageBlit {
+            src_offsets: [
+                Offset3D { x: 0, y: 0, z: 0 },
+                Offset3D {
+                    x: mip_width as i32,
+                    y: mip_height as i32,
+                    z: 1,
+                },
+            ],
+            src_subresource: ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: i - 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            dst_offsets: [
+                Offset3D { x: 0, y: 0, z: 0 },
+                Offset3D {
+                    x: if mip_width > 1 { mip_width / 2 } else { 1 } as i32,
+                    y: if mip_height > 1 { mip_height / 2 } else { 1 } as i32,
+                    z: 1,
+                },
+            ],
+            dst_subresource: ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: i,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+        };
+
+        unsafe {
+            device.cmd_blit_image(
+                command_buffer,
+                image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[blit],
+                vk::Filter::LINEAR,
+            );
+        };
+
+        barrier.old_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+        barrier.src_access_mask = vk::AccessFlags::TRANSFER_READ;
+        barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            )
+        };
+
+        if (mip_height > 1) {
+            mip_height = mip_height / 2;
+        }
+        if (mip_width > 1) {
+            mip_width = mip_width / 2;
+        }
+    }
+
+    barrier.subresource_range.base_mip_level = mip_levels - 1;
+    barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+    barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+    barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+    barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+    unsafe {
+        device.cmd_pipeline_barrier(
+            command_buffer,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        )
+    };
+
+    buffers::end_single_time_recording(device, command_buffer, graphics_queue, pool);
 }

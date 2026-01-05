@@ -7,12 +7,13 @@ use ash::vk::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
     GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
-    PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo,
-    PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags,
-    PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo,
-    PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule,
-    ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet,
+    PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout,
+    PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo,
+    PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
+    PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo,
+    PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D,
+    RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType,
+    Viewport, WriteDescriptorSet,
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;
@@ -86,15 +87,16 @@ pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
 }
 
-pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
+pub fn mobject_descriptor_pool(device: &Device, n_objects: u32) -> DescriptorPool {
+    let max_frames_in_flight = MAX_FRAMES_IN_FLIGHT as usize;
     let pool_sizes = [
         DescriptorPoolSize {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 6,
+            descriptor_count: n_objects * MAX_FRAMES_IN_FLIGHT,
         },
         DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 6,
+            descriptor_count: n_objects * MAX_FRAMES_IN_FLIGHT,
         },
     ];
     let pool_info = DescriptorPoolCreateInfo {
@@ -103,7 +105,7 @@ pub fn mobject_descriptor_pool(device: &Device) -> DescriptorPool {
         p_pool_sizes: pool_sizes.as_ptr(),
         // TODO: this should be MAX_FRAMES_IN_FLIGHT * num objects, since those are the
         // amount of times this will be used to allocate descriptor sets
-        max_sets: 6,
+        max_sets: n_objects * MAX_FRAMES_IN_FLIGHT,
         ..Default::default()
     };
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
@@ -326,6 +328,17 @@ pub fn create_graphics_pipeline(
         patch_control_points: 3,
         ..Default::default()
     };
+    let depth_stencil_info = PipelineDepthStencilStateCreateInfo {
+        s_type: StructureType::PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        depth_test_enable: vk::TRUE,
+        depth_write_enable: vk::TRUE,
+        depth_compare_op: vk::CompareOp::LESS,
+        depth_bounds_test_enable: vk::FALSE,
+        min_depth_bounds: 0.0,
+        max_depth_bounds: 1.0,
+        stencil_test_enable: vk::FALSE,
+        ..Default::default()
+    };
     let pipeline_crate_info = GraphicsPipelineCreateInfo {
         s_type: StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
         stage_count: shader_stages.len() as u32,
@@ -336,7 +349,7 @@ pub fn create_graphics_pipeline(
         p_rasterization_state: &rasterizatio_info,
         p_multisample_state: &multisample_info,
         p_color_blend_state: &color_blend_info,
-        p_depth_stencil_state: std::ptr::null(),
+        p_depth_stencil_state: &depth_stencil_info,
         p_tessellation_state: &tesselation_info,
         layout: pipeline_layout,
         render_pass,

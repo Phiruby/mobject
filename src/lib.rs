@@ -12,18 +12,18 @@ pub mod window;
 use ash::vk::{
     self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
     DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle,
-    Image, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, Pipeline,
-    PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo,
-    SurfaceKHR, SwapchainKHR,
+    Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags,
+    PhysicalDeviceFeatures, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass,
+    ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use c_utils::Utf8Pointer;
 use device::QueueFamilies;
 use glfw::PWindow;
+use nalgebra_glm as glm;
 use shapes::{BuiltShape, GlobalUBO, Shape, UBO};
-use std::char::MAX;
 use std::ffi::{CString, c_void};
-use std::thread::current;
+
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
 // TODO: set to num swapchain images instead of hardcoding to my machine
@@ -47,6 +47,9 @@ pub struct Scene {
     uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
     texture_image_view: ImageView,
+    depth_image: Image,
+    depth_image_view: ImageView,
+    depth_image_memory: DeviceMemory,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // TODO: move descriptor sets in a struct with the actual mobject
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -101,16 +104,11 @@ impl Scene {
         let swapchain_imageviews = swapchain::create_image_views(
             &logical_device,
             &swapchain_images,
+            1,
             surface_format.format,
+            ImageAspectFlags::COLOR,
         );
 
-        let render_pass = render_pass::create(surface_format, &logical_device);
-        let framebuffers = buffers::create_frame_buffers(
-            &logical_device,
-            render_pass,
-            &swapchain_imageviews,
-            extent,
-        );
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
         let command_buffer =
             buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
@@ -120,26 +118,48 @@ impl Scene {
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let graphics_queue =
             unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
-        let (image, image_memory) = texture::create_texture_image(
+        let (image, image_memory, mip_levels) = texture::create_texture_image(
             &logical_device,
-            "textures/basic.jpg",
+            "textures/viking_room.png",
             physical_device_memory_properties,
             pool,
             graphics_queue,
         );
-        let texture_image_view = texture::create_texture_image_view(&logical_device, image);
+        let texture_image_view =
+            texture::create_texture_image_view(&logical_device, image, mip_levels);
         let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
-        let (vertex_buffers, vertex_buffer_memories) =
-            buffers::create_vertex_buffers(&logical_device, 10, physical_device_memory_properties);
-        let (index_buffers, index_buffer_memory) =
-            buffers::create_index_buffers(&logical_device, 10, physical_device_memory_properties);
+        let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(
+            &logical_device,
+            60_000,
+            physical_device_memory_properties,
+        );
+        let (index_buffers, index_buffer_memory) = buffers::create_index_buffers(
+            &logical_device,
+            60_000,
+            physical_device_memory_properties,
+        );
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 &logical_device,
                 physical_device_memory_properties,
                 size_of::<GlobalUBO>() as u64,
             );
-
+        let (depth_image, depth_image_view, depth_image_memory, depth_image_format) =
+            buffers::create_depth_buffer(
+                &instance,
+                &logical_device,
+                physical_device,
+                extent,
+                physical_device_memory_properties,
+            );
+        let render_pass = render_pass::create(surface_format, &logical_device, depth_image_format);
+        let framebuffers = buffers::create_frame_buffers(
+            &logical_device,
+            render_pass,
+            &swapchain_imageviews,
+            depth_image_view,
+            extent,
+        );
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [DescriptorSetLayoutBinding {
@@ -185,7 +205,8 @@ impl Scene {
             ]
             .to_vec(),
         );
-        let mobject_descriptor_pool = shaders::mobject_descriptor_pool(&logical_device);
+        let mobject_descriptor_pool =
+            shaders::mobject_descriptor_pool(&logical_device, mobjects.len() as u32);
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
             .iter()
             .map(|mob| {
@@ -208,6 +229,9 @@ impl Scene {
             mobject_descriptor_set_layout,
         );
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
+        let origin = glm::vec3(0.0, 0.0, 0.0);
+        let up = glm::vec3(0.0, 0.0, 1.0);
+        let angle = glm::vec1(45.0);
         Self {
             sync,
             device: logical_device,
@@ -226,6 +250,9 @@ impl Scene {
             _image: image,
             _image_memory: image_memory,
             texture_image_view,
+            depth_image,
+            depth_image_view,
+            depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             mobject_descriptor_sets,
@@ -237,14 +264,10 @@ impl Scene {
             global_ubo: GlobalUBO {
                 camera_position,
                 _pad: 0,
-                view: glm::ext::look_at(
-                    camera_position,
-                    glm::vec3(0.0, 0.0, 0.0),
-                    glm::vec3(0.0, 0.0, 1.0),
-                ),
-                proj: (glm::ext::perspective(
-                    glm::radians(45.0),
+                view: glm::look_at(&camera_position, &origin, &up),
+                proj: (glm::perspective_zo(
                     (extent.width / extent.height) as f32,
+                    glm::radians(&angle).x,
                     0.1,
                     10.0,
                 )),
@@ -255,7 +278,7 @@ impl Scene {
 
     pub fn main_loop(&mut self) {
         // opengl to vulkan conversion (inverted y)
-        self.global_ubo.proj[1][1] *= -1.0;
+        self.global_ubo.proj.m22 *= -1.0;
         let graphics_queue = unsafe {
             self.device
                 .get_device_queue(0, self.queue_families.graphics_index as u32)
