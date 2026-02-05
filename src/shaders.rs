@@ -325,7 +325,7 @@ pub fn create_graphics_pipeline(
     let tesselation_info = PipelineTessellationStateCreateInfo {
         s_type: StructureType::PIPELINE_TESSELLATION_STATE_CREATE_INFO,
         flags: PipelineTessellationStateCreateFlags::empty(),
-        patch_control_points: 3,
+        patch_control_points: 9,
         ..Default::default()
     };
     let depth_stencil_info = PipelineDepthStencilStateCreateInfo {

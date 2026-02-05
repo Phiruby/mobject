@@ -166,7 +166,7 @@ impl Scene {
                 binding: 0,
                 descriptor_type: DescriptorType::UNIFORM_BUFFER,
                 descriptor_count: 1,
-                stage_flags: ShaderStageFlags::VERTEX,
+                stage_flags: ShaderStageFlags::VERTEX | ShaderStageFlags::TESSELLATION_EVALUATION,
                 ..Default::default()
             }]
             .to_vec(),
@@ -192,7 +192,8 @@ impl Scene {
                     binding: 0,
                     descriptor_type: DescriptorType::UNIFORM_BUFFER,
                     descriptor_count: 1,
-                    stage_flags: ShaderStageFlags::VERTEX,
+                    stage_flags: ShaderStageFlags::VERTEX
+                        | ShaderStageFlags::TESSELLATION_EVALUATION,
                     ..Default::default()
                 },
                 DescriptorSetLayoutBinding {
