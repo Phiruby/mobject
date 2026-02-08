@@ -12,8 +12,9 @@ use ash::{
     Instance,
     vk::{self, Fence, FenceCreateInfo, Handle, Semaphore, SemaphoreCreateInfo, StructureType},
 };
+use glfw::{GlfwReceiver, WindowEvent};
 use glfw::{self, Glfw, PWindow, ffi::VkSurfaceKHR};
-pub fn create_glfw_window(width: u32, height: u32) -> (PWindow, Vec<String>) {
+pub fn create_glfw_window(width: u32, height: u32) -> (PWindow, Vec<String>, GlfwReceiver<(f64, WindowEvent)>) {
     let mut wrapper = glfw::init_no_callbacks().unwrap();
     wrapper.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
     wrapper.window_hint(glfw::WindowHint::Resizable(true));
@@ -24,7 +25,7 @@ pub fn create_glfw_window(width: u32, height: u32) -> (PWindow, Vec<String>) {
         Some(x) => x,
         _ => Vec::new(),
     };
-    (window, required_extensions)
+    (window, required_extensions, receiver)
 }
 
 pub fn create_surface(instance: &Instance, window: &PWindow) -> VkSurfaceKHR {

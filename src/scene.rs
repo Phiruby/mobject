@@ -1,9 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet,
-    DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle,
-    Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags,
-    PhysicalDeviceFeatures, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass,
-    ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR,
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -13,10 +9,32 @@ use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::ffi::{CString, c_void};
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device};
+use std::time::{Instant, Duration};
 use crate::MAX_FRAMES_IN_FLIGHT;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 1] = ["VK_KHR_swapchain"];
+
+enum Action {
+    AddMobject(Box<dyn Shape>),
+    Wait { seconds: u8 }
+}
+
+/// Represents the current state of the scene:
+/// Frozen: all movement / actions are blocked. Nothing in the scene can change.
+///     Usually in this state when the user explicitly freezes everything
+/// Waiting: existing mobjects in the scene are free to animate and move around.
+///     But any future action will have to wait (e.g: adding new objects)
+/// Moving: all mobjects are freely moving
+enum SceneState {
+    Frozen,
+    Waiting{ from: Instant, duration: Duration},
+    Moving
+}
+
 pub struct Scene {
+    state: SceneState,
+    mobjects: Vec<Box<dyn BuiltShape>>,
+    actions: Vec<Action>,
     sync: Vec<window::Sync>,
     device: Device,
     swapchain_device: khr::swapchain::Device,
@@ -44,15 +62,15 @@ pub struct Scene {
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
-    mobjects: Vec<Box<dyn BuiltShape>>,
     global_ubo: GlobalUBO,
     pipeline_layout: PipelineLayout,
+    physical_device_properties: PhysicalDeviceMemoryProperties
 }
 
 impl Scene {
     pub fn new(mobjects: Option<Vec<Box<dyn Shape>>>) -> Self {
         let entry = unsafe { Entry::load().unwrap() };
-        let (window, required_instance_extensions) = window::create_glfw_window(700, 700);
+        let (window, required_instance_extensions, _window_event_listener) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
         let surface_instance = surface::Instance::new(&entry, &instance);
         let surface = window::create_surface(&instance, &window);
@@ -101,7 +119,6 @@ impl Scene {
         let command_buffer =
             buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
         let sync = window::create_sync_objects(&logical_device);
-        // TODO: unhardcode the max 10 vertices
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let graphics_queue =
@@ -222,6 +239,9 @@ impl Scene {
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);
         Self {
+            state: SceneState::Moving,
+            actions: Vec::new(),
+            mobjects: Vec::new(),
             sync,
             device: logical_device,
             swapchain_device,
@@ -248,7 +268,6 @@ impl Scene {
             extent,
             graphics_pipeline,
             queue_families,
-            mobjects,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
                 camera_position,
@@ -262,6 +281,28 @@ impl Scene {
                 )),
             },
             pipeline_layout,
+            physical_device_properties: physical_device_memory_properties
+        }
+    }
+
+    pub fn add(&mut self, mobject: Box<dyn Shape>) {
+        self.actions.push(Action::AddMobject(mobject));
+    }
+    pub fn wait(&mut self, seconds: u8) {
+        self.actions.push(Action::Wait { seconds });
+    }
+
+    fn set_state(&mut self, state: SceneState) {
+        self.state = state;
+    }
+
+    fn take_action(&mut self) {
+        if self.actions.len() == 0 {return ;}
+        // NOTE: going backwards. doing this for now for simplicity
+        let action = self.actions.pop().unwrap();
+        match action {
+            Action::AddMobject(mobj) => self.mobjects.push(mobj.build(&self.device, self.physical_device_properties)),
+            Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
         }
     }
 
@@ -279,9 +320,17 @@ impl Scene {
         let mut current_frame: usize = 0;
         while !(self.window.should_close()) {
             unsafe { glfw::ffi::glfwPollEvents() };
-
+            if let SceneState::Moving = self.state {
+                self.take_action();
+            }
             self.draw_frame(graphics_queue, present_queue, current_frame);
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
+            if let SceneState::Waiting { from, duration } = self.state {
+                let elapsed = from.elapsed();
+                if elapsed > duration {
+                    self.set_state(SceneState::Moving);
+                }
+            }
         }
     }
 
