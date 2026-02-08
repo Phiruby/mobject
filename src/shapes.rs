@@ -380,6 +380,7 @@ impl BuiltShape for Rectangle {
 
 pub struct Points {
     vertices: Vec<Vertex2D>,
+    indices: Vec<u32>,
     uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
     uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -387,8 +388,10 @@ pub struct Points {
 }
 impl Points {
     fn new(vertices: Vec<Vertex2D>) -> Self {
+        let indices = (0..vertices.len() as u32).collect();
         Self {
             vertices,
+            indices,
             uniform_buffers: None,
             uniform_buffer_memories: None,
             uniform_mapped_memories: None,
@@ -414,6 +417,7 @@ impl Shape for Points {
             );
         let points = Self {
             vertices: self.vertices,
+            indices: self.indices,
             uniform_buffers: Some(uniform_buffers),
             uniform_buffer_memories: Some(uniform_buffer_memories),
             uniform_mapped_memories: Some(uniform_mapped_memories),
@@ -425,10 +429,10 @@ impl Shape for Points {
 
 impl BuiltShape for Points {
     fn get_vertices(&self) -> &[Vertex2D] {
-        &[]
+        &self.vertices
     }
     fn indices(&self) -> &[u32] {
-        &[]
+        &self.indices
     }
     fn get_uniform_buffer(
         &self,
@@ -451,8 +455,8 @@ impl Default for Points {
     fn default() -> Self {
         Self::new(vec![
             Vertex2D::new(
-                Vec3::new(-0.25, -0.25, 0.00),
-                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(-0.25, -0.25, -0.90),
+                Vec3::new(1.0, 1.0, 1.0),
                 Some(Vec2::new(0.0, 0.0)),
             ),
             Vertex2D::new(
@@ -472,12 +476,12 @@ impl Default for Points {
                 Some(Vec2::new(0.0, 0.5)),
             ),
             Vertex2D::new(
-                Vec3::new(0.00, 0.00, 0.35), // center peak
+                Vec3::new(0.00, 0.00, 0.85), // center peak
                 Vec3::new(1.0, 1.0, 1.0),
                 Some(Vec2::new(0.5, 0.5)),
             ),
             Vertex2D::new(
-                Vec3::new(0.25, 0.00, -0.15),
+                Vec3::new(0.25, 0.00, -0.65),
                 Vec3::new(0.0, 1.0, 1.0),
                 Some(Vec2::new(1.0, 0.5)),
             ),
@@ -493,7 +497,7 @@ impl Default for Points {
                 Some(Vec2::new(0.5, 1.0)),
             ),
             Vertex2D::new(
-                Vec3::new(0.25, 0.25, 0.00),
+                Vec3::new(0.25, 0.25, 0.90),
                 Vec3::new(0.2, 0.8, 1.0),
                 Some(Vec2::new(1.0, 1.0)),
             ),
