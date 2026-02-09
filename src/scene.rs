@@ -58,7 +58,6 @@ pub struct Scene {
     depth_image_memory: DeviceMemory,
     texture_sampler: Sampler,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
-    // TODO: move descriptor sets in a struct with the actual mobject
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobject_descriptor_pool: DescriptorPool,
     mobject_descriptor_set_layout: DescriptorSetLayout,
@@ -71,7 +70,7 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(mobjects: Option<Vec<Box<dyn Shape>>>) -> Self {
+    pub fn new() -> Self {
         let entry = unsafe { Entry::load().unwrap() };
         let (window, required_instance_extensions, _window_event_listener) = window::create_glfw_window(700, 700);
         let instance = create_vk_instance(&entry, Some(required_instance_extensions));
@@ -187,11 +186,6 @@ impl Scene {
             &uniform_buffers,
         );
 
-        let mobjects: Vec<Box<dyn BuiltShape>> = mobjects
-            .unwrap_or_default()
-            .into_iter()
-            .map(|obj| obj.build(&logical_device, physical_device_memory_properties))
-            .collect();
 
         let mobject_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
@@ -217,20 +211,7 @@ impl Scene {
         // TODO: unhardcode 10
         let mobject_descriptor_pool =
             shaders::mobject_descriptor_pool(&logical_device, 10 as u32);
-        let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
-            .iter()
-            .map(|mob| {
-                let (uniform_buffer, _, _) = mob.get_uniform_buffer();
-                shaders::mobject_descriptor_sets(
-                    &logical_device,
-                    mobject_descriptor_set_layout,
-                    mobject_descriptor_pool,
-                    uniform_buffer,
-                    texture_image_view,
-                    sampler,
-                )
-            })
-            .collect();
+        let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
         let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
             &logical_device,
             extent,
@@ -309,7 +290,6 @@ impl Scene {
         let action = self.actions.pop().unwrap();
         match action {
             Action::AddMobject(mobj) => {
-                dbg!("Adding to mobjects");
                 self.mobjects.push(mobj.build(&self.device, self.physical_device_properties));
                 let (uniform_buffer, _, _) = self.mobjects.last().unwrap().get_uniform_buffer();
                 self.mobject_descriptor_sets.push(
@@ -323,7 +303,7 @@ impl Scene {
                     )
                 );
             },
-            Action::Wait { seconds } => {dbg!("Waiting..."); self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) })},
+            Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
         }
     }
 

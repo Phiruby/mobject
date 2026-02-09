@@ -8,7 +8,7 @@ fn main() {
     // let mobjects: Vec<Box<dyn Shape>> = vec![shape];
     let bezier_points = Box::new(Points::default());
     // let mobjects: Vec<Box<dyn Shape>> = vec![bezier_points];
-    let mut scene = Scene::new(None);
+    let mut scene = Scene::new();
     // scene.add(bezier_points);
     scene.add(bezier_points);
     scene.wait(10);
