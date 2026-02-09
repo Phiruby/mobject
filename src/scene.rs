@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -56,9 +56,12 @@ pub struct Scene {
     depth_image: Image,
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
+    texture_sampler: Sampler,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // TODO: move descriptor sets in a struct with the actual mobject
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
+    mobject_descriptor_pool: DescriptorPool,
+    mobject_descriptor_set_layout: DescriptorSetLayout,
     extent: Extent2D,
     graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
@@ -211,8 +214,9 @@ impl Scene {
             ]
             .to_vec(),
         );
+        // TODO: unhardcode 10
         let mobject_descriptor_pool =
-            shaders::mobject_descriptor_pool(&logical_device, mobjects.len() as u32);
+            shaders::mobject_descriptor_pool(&logical_device, 10 as u32);
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = mobjects
             .iter()
             .map(|mob| {
@@ -254,6 +258,7 @@ impl Scene {
             vertex_buffer_memory: vertex_buffer_memories,
             index_buffers,
             index_buffer_memory,
+            texture_sampler: sampler,
             uniform_buffers: uniform_buffers.to_vec(),
             uniform_buffer_memories: uniform_buffer_memories.to_vec(),
             _image: image,
@@ -265,6 +270,8 @@ impl Scene {
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             mobject_descriptor_sets,
+            mobject_descriptor_pool,
+            mobject_descriptor_set_layout,
             extent,
             graphics_pipeline,
             queue_families,
@@ -301,8 +308,22 @@ impl Scene {
         // NOTE: going backwards. doing this for now for simplicity
         let action = self.actions.pop().unwrap();
         match action {
-            Action::AddMobject(mobj) => self.mobjects.push(mobj.build(&self.device, self.physical_device_properties)),
-            Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
+            Action::AddMobject(mobj) => {
+                dbg!("Adding to mobjects");
+                self.mobjects.push(mobj.build(&self.device, self.physical_device_properties));
+                let (uniform_buffer, _, _) = self.mobjects.last().unwrap().get_uniform_buffer();
+                self.mobject_descriptor_sets.push(
+                    shaders::mobject_descriptor_sets(
+                        &self.device,
+                        self.mobject_descriptor_set_layout,
+                        self.mobject_descriptor_pool,
+                        uniform_buffer,
+                        self.texture_image_view,
+                        self.texture_sampler,
+                    )
+                );
+            },
+            Action::Wait { seconds } => {dbg!("Waiting..."); self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) })},
         }
     }
 
