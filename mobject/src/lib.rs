@@ -9,7 +9,7 @@ pub mod texture;
 pub mod transforms;
 pub mod window;
 pub mod scene;
-
+pub mod pipelines;
 pub use scene::Scene;
 // TODO: set to num swapchain images instead of hardcoding to my machine
 const MAX_FRAMES_IN_FLIGHT: u32 = 3;

@@ -13,7 +13,7 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::{mem::offset_of, os::raw::c_void};
-
+use crate::pipelines::Pipelines;
 use crate::{MAX_FRAMES_IN_FLIGHT};
 
 #[repr(C)]
@@ -80,6 +80,7 @@ impl Vertex2D {
 }
 
 pub trait BuiltShape {
+    fn get_pipeline(&self) -> Pipelines;
     fn vertices2d(&self) -> &[Vertex2D] {
         self.get_vertices()
     }

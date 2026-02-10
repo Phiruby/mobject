@@ -9,12 +9,13 @@ use std::{os::raw::c_void};
 
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}};
 use crate::define_shape;
-
+use crate::pipelines::Pipelines;
 define_shape!(
     pub struct Triangle {
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
-    }
+    },
+    Pipelines::Flat2D
 );
 impl Default for Triangle {
     fn default() -> Self {
@@ -30,7 +31,8 @@ define_shape!(
     pub struct ObjModel {
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
-    }
+    },
+    Pipelines::Space3D
 );
 
 impl ObjModel {
@@ -57,12 +59,13 @@ impl ObjModel {
 define_shape!(
     pub struct Rectangle {
         vertices: [Vertex2D; 4],
-        indices: [u32; 6],
-    }
+        indices: Vec<u32>,
+    },
+    Pipelines::Flat2D
 );
 impl Rectangle {
     pub fn load(vertices: [Vertex2D; 4]) -> Self {
-        Self::with_indices(vertices, [0, 1, 2, 2, 3, 0])
+        Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
     }
 }
 

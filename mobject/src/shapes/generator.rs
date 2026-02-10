@@ -4,14 +4,15 @@ use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::buffers;
 use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D};
 use nalgebra_glm as glm;
-
+use crate::pipelines::Pipelines;
 #[macro_export]
 macro_rules! define_shape {
     (
         $vis:vis struct $name:ident {
             vertices: $vty:ty,
             indices:  $ity:ty $(,)?
-        }
+        },
+        $pipeline:expr
     ) => {
         $vis struct $name {
             pub vertices: $vty,
@@ -21,6 +22,7 @@ macro_rules! define_shape {
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
             ubo: UBO,
+            pipeline: Pipelines
         }
 
         impl $name {
@@ -32,6 +34,7 @@ macro_rules! define_shape {
                     uniform_buffer_memories: None,
                     uniform_mapped_memories: None,
                     ubo,
+                    pipeline: $pipeline
                 }
             }
 
@@ -78,6 +81,10 @@ macro_rules! define_shape {
         impl BuiltShape for $name {
             fn get_vertices(&self) -> &[Vertex2D] {
                 &self.vertices
+            }
+
+            fn get_pipeline(&self) -> Pipelines {
+                self.pipeline
             }
 
             fn indices(&self) -> &[u32] {
