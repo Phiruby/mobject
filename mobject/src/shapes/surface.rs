@@ -5,83 +5,16 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::{os::raw::c_void};
-
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}};
+use crate::define_shape;
 
+define_shape!(
+    pub struct Points {
+        vertices: Vec<Vertex2D>,
+        indices: Vec<u32>,
+    }
+);
 
-pub struct Points {
-    vertices: Vec<Vertex2D>,
-    indices: Vec<u32>,
-    uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
-    uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
-    uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
-    ubo: UBO,
-}
-impl Points {
-    fn new(vertices: Vec<Vertex2D>) -> Self {
-        let indices = (0..vertices.len() as u32).collect();
-        Self {
-            vertices,
-            indices,
-            uniform_buffers: None,
-            uniform_buffer_memories: None,
-            uniform_mapped_memories: None,
-            ubo: UBO {
-                model: glm::mat4(
-                    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-                ),
-            },
-        }
-    }
-}
-impl Shape for Points {
-    fn build(
-        self: Box<Self>,
-        device: &Device,
-        mem_properties: PhysicalDeviceMemoryProperties,
-    ) -> Box<dyn BuiltShape> {
-        let (uniform_buffers, uniform_buffer_memories, uniform_mapped_memories) =
-            buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
-                device,
-                mem_properties,
-                size_of::<UBO>() as u64,
-            );
-        let points = Self {
-            vertices: self.vertices,
-            indices: self.indices,
-            uniform_buffers: Some(uniform_buffers),
-            uniform_buffer_memories: Some(uniform_buffer_memories),
-            uniform_mapped_memories: Some(uniform_mapped_memories),
-            ubo: self.ubo,
-        };
-        Box::new(points)
-    }
-}
-
-impl BuiltShape for Points {
-    fn get_vertices(&self) -> &[Vertex2D] {
-        &self.vertices
-    }
-    fn indices(&self) -> &[u32] {
-        &self.indices
-    }
-    fn get_uniform_buffer(
-        &self,
-    ) -> (
-        &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-        &[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
-        &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
-    ) {
-        (
-            self.uniform_buffers.as_ref().unwrap(),
-            self.uniform_buffer_memories.as_ref().unwrap(),
-            self.uniform_mapped_memories.as_ref().unwrap(),
-        )
-    }
-    fn get_ubo_contents(&self) -> &UBO {
-        &self.ubo
-    }
-}
 impl Default for Points {
     fn default() -> Self {
         Self::new(vec![

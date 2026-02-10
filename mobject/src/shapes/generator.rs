@@ -1,3 +1,11 @@
+use ash::vk::{Buffer, DeviceMemory};
+use ash::Device;
+use crate::MAX_FRAMES_IN_FLIGHT;
+use crate::buffers;
+use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D};
+use nalgebra_glm as glm;
+
+#[macro_export]
 macro_rules! define_shape {
     (
         $vis:vis struct $name:ident {
@@ -36,9 +44,10 @@ macro_rules! define_shape {
             }
 
             pub fn new(vertices: $vty) -> Self {
+                let nvertices: u32 = vertices.len() as u32;
                 Self::with_ubo(
                     vertices,
-                    (0..vertices.len()).collect(),
+                    (0..nvertices).collect(),
                     UBO { model: glm::identity() },
                 )
             }

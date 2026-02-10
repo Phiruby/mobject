@@ -1,7 +1,9 @@
 pub mod surface;
 pub mod primitives;
+pub mod generator;
 
 pub use primitives::*;
+pub use generator::*;
 pub use surface::Points;
 use ash::Device;
 use ash::vk::{
