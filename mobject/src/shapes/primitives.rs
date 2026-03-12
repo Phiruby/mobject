@@ -15,7 +15,7 @@ define_shape!(
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
     },
-    Pipelines::Flat2D
+    Pipelines::Primitive
 );
 impl Default for Triangle {
     fn default() -> Self {
@@ -32,7 +32,7 @@ define_shape!(
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
     },
-    Pipelines::Space3D
+    Pipelines::Primitive
 );
 
 impl ObjModel {
@@ -61,7 +61,7 @@ define_shape!(
         vertices: [Vertex2D; 4],
         indices: Vec<u32>,
     },
-    Pipelines::Flat2D
+    Pipelines::Primitive
 );
 impl Rectangle {
     pub fn load(vertices: [Vertex2D; 4]) -> Self {

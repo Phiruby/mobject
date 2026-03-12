@@ -36,7 +36,7 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
 }
 
-fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
+pub fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
     PipelineRasterizationStateCreateInfo {
         s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         depth_clamp_enable: vk::FALSE,
@@ -50,7 +50,7 @@ fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
     }
 }
 
-fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
+pub fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     PipelineMultisampleStateCreateInfo {
         s_type: StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         sample_shading_enable: vk::FALSE,

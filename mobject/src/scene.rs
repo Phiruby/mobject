@@ -8,7 +8,7 @@ use glfw::PWindow;
 use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::ffi::{CString, c_void};
-use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device};
+use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::MAX_FRAMES_IN_FLIGHT;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
@@ -42,11 +42,11 @@ pub struct Scene {
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
-    framebuffers: Vec<Framebuffer>,
-    vertex_buffers: Vec<Buffer>,
-    vertex_buffer_memory: Vec<DeviceMemory>,
-    index_buffers: Vec<Buffer>,
-    index_buffer_memory: Vec<DeviceMemory>,
+    // framebuffers: Vec<Framebuffer>,
+    // vertex_buffers: Vec<Buffer>,
+    // vertex_buffer_memory: Vec<DeviceMemory>,
+    // index_buffers: Vec<Buffer>,
+    // index_buffer_memory: Vec<DeviceMemory>,
     _image: Image,
     _image_memory: DeviceMemory,
     uniform_buffers: Vec<Buffer>,
@@ -57,7 +57,7 @@ pub struct Scene {
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
     texture_sampler: Sampler,
-    scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+    // scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobject_descriptor_pool: DescriptorPool,
     mobject_descriptor_set_layout: DescriptorSetLayout,
@@ -178,15 +178,25 @@ impl Scene {
             }]
             .to_vec(),
         );
+
         let scene_descriptor_pool = shaders::scene_descriptor_pool(&logical_device);
-        let scene_descriptor_sets = shaders::scene_descriptor_sets(
+        // let scene_descriptor_sets = shaders::scene_descriptor_sets(
+        //     &logical_device,
+        //     scene_descriptor_set_layout,
+        //     scene_descriptor_pool,
+        //     &uniform_buffers,
+        // );
+
+        let _p = pipelines::PrimitivePipeline::new(
             &logical_device,
-            scene_descriptor_set_layout,
+            100,
+            100,
+            render_pass,
+            framebuffers.try_into().unwrap(),
             scene_descriptor_pool,
-            &uniform_buffers,
+            extent,
+            physical_device_memory_properties
         );
-
-
         let mobject_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [
@@ -234,11 +244,11 @@ impl Scene {
             command_buffer,
             swapchain,
             render_pass,
-            framebuffers,
-            vertex_buffers,
-            vertex_buffer_memory: vertex_buffer_memories,
-            index_buffers,
-            index_buffer_memory,
+            // framebuffers,
+            // vertex_buffers,
+            // vertex_buffer_memory: vertex_buffer_memories,
+            // index_buffers,
+            // index_buffer_memory,
             texture_sampler: sampler,
             uniform_buffers: uniform_buffers.to_vec(),
             uniform_buffer_memories: uniform_buffer_memories.to_vec(),
@@ -249,7 +259,7 @@ impl Scene {
             depth_image_view,
             depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
-            scene_descriptor_sets,
+            // scene_descriptor_sets,
             mobject_descriptor_sets,
             mobject_descriptor_pool,
             mobject_descriptor_set_layout,
@@ -307,128 +317,128 @@ impl Scene {
         }
     }
 
-    pub fn main_loop(&mut self) {
-        // opengl to vulkan conversion (inverted y)
-        self.global_ubo.proj.m22 *= -1.0;
-        let graphics_queue = unsafe {
-            self.device
-                .get_device_queue(0, self.queue_families.graphics_index as u32)
-        };
-        let present_queue = unsafe {
-            self.device
-                .get_device_queue(0, self.queue_families.presentation_index as u32)
-        };
-        let mut current_frame: usize = 0;
-        while !(self.window.should_close()) {
-            unsafe { glfw::ffi::glfwPollEvents() };
-            if let SceneState::Moving = self.state {
-                self.take_action();
-            }
-            self.draw_frame(graphics_queue, present_queue, current_frame);
-            current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
-            if let SceneState::Waiting { from, duration } = self.state {
-                let elapsed = from.elapsed();
-                if elapsed > duration {
-                    self.set_state(SceneState::Moving);
-                }
-            }
-        }
-    }
+    // pub fn main_loop(&mut self) {
+    //     // opengl to vulkan conversion (inverted y)
+    //     self.global_ubo.proj.m22 *= -1.0;
+    //     let graphics_queue = unsafe {
+    //         self.device
+    //             .get_device_queue(0, self.queue_families.graphics_index as u32)
+    //     };
+    //     let present_queue = unsafe {
+    //         self.device
+    //             .get_device_queue(0, self.queue_families.presentation_index as u32)
+    //     };
+    //     let mut current_frame: usize = 0;
+    //     while !(self.window.should_close()) {
+    //         unsafe { glfw::ffi::glfwPollEvents() };
+    //         if let SceneState::Moving = self.state {
+    //             self.take_action();
+    //         }
+    //         self.draw_frame(graphics_queue, present_queue, current_frame);
+    //         current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
+    //         if let SceneState::Waiting { from, duration } = self.state {
+    //             let elapsed = from.elapsed();
+    //             if elapsed > duration {
+    //                 self.set_state(SceneState::Moving);
+    //             }
+    //         }
+    //     }
+    // }
 
-    fn draw_frame(&mut self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
-        let vertex_buffer = self.vertex_buffers[current_frame];
-        let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
-        let index_buffer = self.index_buffers[current_frame];
-        let index_buffer_memory = self.index_buffer_memory[current_frame];
-        let sync = &self.sync[current_frame];
-        let command_buffer = self.command_buffer[current_frame];
+    // fn draw_frame(&mut self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
+    //     let vertex_buffer = self.vertex_buffers[current_frame];
+    //     let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
+    //     let index_buffer = self.index_buffers[current_frame];
+    //     let index_buffer_memory = self.index_buffer_memory[current_frame];
+    //     let sync = &self.sync[current_frame];
+    //     let command_buffer = self.command_buffer[current_frame];
 
-        unsafe {
-            self.device
-                .wait_for_fences(&[sync.in_flight], true, u64::MAX)
-        }
-        .unwrap();
-        unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
-        let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
-        window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
-        window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
-        window::fill_uniform_buffer(
-            self.uniform_buffer_mapped_memories[current_frame],
-            &self.global_ubo,
-        );
+    //     unsafe {
+    //         self.device
+    //             .wait_for_fences(&[sync.in_flight], true, u64::MAX)
+    //     }
+    //     .unwrap();
+    //     unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
+    //     let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
+    //     window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
+    //     window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
+    //     window::fill_uniform_buffer(
+    //         self.uniform_buffer_mapped_memories[current_frame],
+    //         &self.global_ubo,
+    //     );
 
-        self.mobjects.iter().for_each(|mob| {
-            let (_, _, mapped_memory) = mob.get_uniform_buffer();
-            window::fill_uniform_buffer(mapped_memory[current_frame], mob.get_ubo_contents());
-        });
-        let (image_index, _suboptimal) = unsafe {
-            self.swapchain_device.acquire_next_image(
-                self.swapchain,
-                u64::MAX,
-                sync.image_available,
-                Fence::null(),
-            )
-        }
-        .unwrap();
-        unsafe {
-            self.device
-                .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
-        }
-        .unwrap();
+    //     self.mobjects.iter().for_each(|mob| {
+    //         let (_, _, mapped_memory) = mob.get_uniform_buffer();
+    //         window::fill_uniform_buffer(mapped_memory[current_frame], mob.get_ubo_contents());
+    //     });
+    //     let (image_index, _suboptimal) = unsafe {
+    //         self.swapchain_device.acquire_next_image(
+    //             self.swapchain,
+    //             u64::MAX,
+    //             sync.image_available,
+    //             Fence::null(),
+    //         )
+    //     }
+    //     .unwrap();
+    //     unsafe {
+    //         self.device
+    //             .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
+    //     }
+    //     .unwrap();
 
-        buffers::record_command_buffer(
-            &self.device,
-            command_buffer,
-            vertex_buffer,
-            index_buffer,
-            image_index,
-            self.render_pass,
-            &self.framebuffers,
-            self.scene_descriptor_sets[current_frame],
-            self.mobject_descriptor_sets
-                .iter()
-                .map(|dsets| dsets[current_frame])
-                .collect(),
-            &self.mobjects,
-            self.extent,
-            self.pipeline_layout,
-            self.graphics_pipeline,
-        );
-        let semaphores = vec![sync.image_available];
-        let wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let signal_semaphores = vec![sync.render_finished];
-        let submit_info = SubmitInfo {
-            s_type: StructureType::SUBMIT_INFO,
-            wait_semaphore_count: 1,
-            p_wait_semaphores: semaphores.as_ptr(),
-            p_wait_dst_stage_mask: wait_stages.as_ptr(),
-            command_buffer_count: 1,
-            p_command_buffers: &command_buffer,
-            signal_semaphore_count: 1,
-            p_signal_semaphores: signal_semaphores.as_ptr(),
-            ..Default::default()
-        };
-        unsafe {
-            self.device
-                .queue_submit(graphics_queue, &[submit_info], sync.in_flight)
-        }
-        .unwrap();
-        let swapchains = vec![self.swapchain];
-        let present_info = PresentInfoKHR {
-            s_type: StructureType::PRESENT_INFO_KHR,
-            wait_semaphore_count: 1,
-            p_wait_semaphores: signal_semaphores.as_ptr(),
-            swapchain_count: 1,
-            p_swapchains: swapchains.as_ptr(),
-            p_image_indices: &image_index,
-            ..Default::default()
-        };
-        unsafe {
-            self.swapchain_device
-                .queue_present(present_queue, &present_info)
-        }
-        .unwrap();
-    }
+    //     buffers::record_command_buffer(
+    //         &self.device,
+    //         command_buffer,
+    //         vertex_buffer,
+    //         index_buffer,
+    //         image_index,
+    //         self.render_pass,
+    //         &self.framebuffers,
+    //         self.scene_descriptor_sets[current_frame],
+    //         self.mobject_descriptor_sets
+    //             .iter()
+    //             .map(|dsets| dsets[current_frame])
+    //             .collect(),
+    //         &self.mobjects,
+    //         self.extent,
+    //         self.pipeline_layout,
+    //         self.graphics_pipeline,
+    //     );
+    //     let semaphores = vec![sync.image_available];
+    //     let wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+    //     let signal_semaphores = vec![sync.render_finished];
+    //     let submit_info = SubmitInfo {
+    //         s_type: StructureType::SUBMIT_INFO,
+    //         wait_semaphore_count: 1,
+    //         p_wait_semaphores: semaphores.as_ptr(),
+    //         p_wait_dst_stage_mask: wait_stages.as_ptr(),
+    //         command_buffer_count: 1,
+    //         p_command_buffers: &command_buffer,
+    //         signal_semaphore_count: 1,
+    //         p_signal_semaphores: signal_semaphores.as_ptr(),
+    //         ..Default::default()
+    //     };
+    //     unsafe {
+    //         self.device
+    //             .queue_submit(graphics_queue, &[submit_info], sync.in_flight)
+    //     }
+    //     .unwrap();
+    //     let swapchains = vec![self.swapchain];
+    //     let present_info = PresentInfoKHR {
+    //         s_type: StructureType::PRESENT_INFO_KHR,
+    //         wait_semaphore_count: 1,
+    //         p_wait_semaphores: signal_semaphores.as_ptr(),
+    //         swapchain_count: 1,
+    //         p_swapchains: swapchains.as_ptr(),
+    //         p_image_indices: &image_index,
+    //         ..Default::default()
+    //     };
+    //     unsafe {
+    //         self.swapchain_device
+    //             .queue_present(present_queue, &present_info)
+    //     }
+    //     .unwrap();
+    // }
 }
 
 fn create_vk_instance(

@@ -5,14 +5,15 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::{os::raw::c_void};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}, pipelines::Pipelines};
 use crate::define_shape;
 
 define_shape!(
     pub struct Points {
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
-    }
+    },
+    Pipelines::Primitive
 );
 
 impl Default for Points {

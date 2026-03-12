@@ -197,19 +197,17 @@ pub fn create_vertex_buffers(
     device: &Device,
     num_vertices_upper_bound: usize,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>) {
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
+) -> ([Buffer; MAX_FRAMES_IN_FLIGHT as usize], [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]) {
+    let entities: [(Buffer, DeviceMemory); MAX_FRAMES_IN_FLIGHT as usize] = array::from_fn(|_| {
             create_buffer(
                 device,
                 (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
                 BufferUsageFlags::VERTEX_BUFFER,
                 memory_proprties,
             )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+        });
+    let buffers = array::from_fn(|i| entities[i].0);
+    let memories = array::from_fn(|i| entities[i].1);
     (buffers, memories)
 }
 
@@ -217,19 +215,18 @@ pub fn create_index_buffers(
     device: &Device,
     num_indices_upper_bound: usize,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>) {
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
+) -> ([Buffer; MAX_FRAMES_IN_FLIGHT as usize], [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]) {
+    let entities: [(Buffer, DeviceMemory); MAX_FRAMES_IN_FLIGHT as usize] = array::from_fn(|_| {
             create_buffer(
                 device,
                 (size_of::<u32>() * num_indices_upper_bound) as u64,
                 BufferUsageFlags::INDEX_BUFFER,
                 memory_proprties,
             )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+        });
+
+    let buffers = array::from_fn(|i| entities[i].0);
+    let memories = array::from_fn(|i| entities[i].1);
     (buffers, memories)
 }
 

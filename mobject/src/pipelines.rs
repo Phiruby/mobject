@@ -1,34 +1,39 @@
-use ash::vk::{self, Buffer, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, PhysicalDeviceMemoryProperties, RenderPass, ShaderStageFlags, VertexInputAttributeDescription, VertexInputBindingDescription, StructureType, PrimitiveTopology};
+use std::ffi::CString;
+
+use ash::vk::{self, Buffer, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, PipelineTessellationStateCreateInfo, PipelineDepthStencilStateCreateInfo};
 use ash::Device;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders};
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
 /// adhered. Each mobject implementing a specific pipeline is responsible
 /// to follow this layout.
-enum Pipelines {
-    Primitive {
-        vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
-        vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT],
-        index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
-        index_buffer_memories: [Buffer; MAX_FRAMES_IN_FLIGHT],
-        uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
-        uniform_buffer_memories: [Buffer; MAX_FRAMES_IN_FLIGHT],
-        render_pass: RenderPass,
-        framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT],
-        descriptor_set_layout: DescriptorSetLayout,
-        descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT],
-    },
+#[derive(Clone, Copy)]
+pub enum Pipelines {
+    Primitive,
     Curved
 }
 
-struct CompletePipeline {
+pub struct PrimitivePipeline {
+    vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    render_pass: RenderPass,
+    framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
+    descriptor_set_layout: DescriptorSetLayout,
+    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+}
+
+struct CompletePipeline<'a> {
     extent: Extent2D,
-    vertex_path: &str,
-    fragment_path: &str,
-    tesc_path: Option<&str>,
-    tese_path: Option<&str>,
+    vertex_path: &'a str,
+    fragment_path: &'a str,
+    tesc_path: Option<&'a str>,
+    tese_path: Option<&'a str>,
     vertex_binding_description: VertexInputBindingDescription,
-    vertex_attribute_description: [VertexInputAttributeDescription; MAX_FRAMES_IN_FLIGHT],
+    vertex_attribute_description: [VertexInputAttributeDescription; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
     descriptor_set: DescriptorSet
 }
@@ -53,7 +58,10 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
 
 fn create_graphics_pipeline(
     device: &Device,
-    pipeline_info: CompletePipeline
+    extent: Extent2D,
+    pipeline_info: CompletePipeline,
+    render_pass: RenderPass,
+    descriptor_set_layout: DescriptorSetLayout
 ) -> (Pipeline, PipelineLayout) {
     let vertex_bytes = std::fs::read(pipeline_info.vertex_path).unwrap();
     let vertex_shader_module = create_shader_module(vertex_bytes, device);
@@ -144,8 +152,8 @@ fn create_graphics_pipeline(
         p_scissors: &sciccors,
         ..Default::default()
     };
-    let rasterizatio_info = rasterization_create_info();
-    let multisample_info = multisampling_create_info();
+    let rasterizatio_info = shaders::rasterization_create_info();
+    let multisample_info = shaders::multisampling_create_info();
     let color_attachment = PipelineColorBlendAttachmentState {
         color_write_mask: vk::ColorComponentFlags::RGBA,
         blend_enable: vk::FALSE,
@@ -161,7 +169,7 @@ fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let descriptor_set_layouts = [scene_descriptor_set_layout, mobject_descriptor_set_layout];
+    let descriptor_set_layouts = [descriptor_set_layout];
     let pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
         set_layout_count: descriptor_set_layouts.len() as u32,
@@ -215,17 +223,17 @@ fn create_graphics_pipeline(
 }
 
 
-impl Pipelines::Primitive {
+impl PrimitivePipeline {
     pub fn new(
         logical_device: &Device,
         nvertices: usize,
         nindices: usize,
         // TODO: the pipeline should create its own render pass?
         render_pass: RenderPass,
-        framebuffers: Vec<Framebuffer>,
+        framebuffers: [Framebuffer; 3],
         descriptor_pool: DescriptorPool,
         extent: Extent2D,
-        physical_device_memory_properties: PhysicalDeviceMemoryProperties
+        physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     ) -> Self {
         let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(logical_device, nvertices, physical_device_memory_properties);
 
@@ -248,5 +256,18 @@ impl Pipelines::Primitive {
         );
 
         let descriptor_sets = shaders::scene_descriptor_sets(logical_device, descriptor_set_layout, descriptor_pool, &uniform_buffers);
+
+        Self {
+            vertex_buffers,
+            vertex_buffer_memories,
+            index_buffers,
+            index_buffer_memories,
+            uniform_buffers,
+            uniform_buffer_memories,
+            render_pass,
+            framebuffers,
+            descriptor_set_layout,
+            descriptor_sets
+        }
     }
 }
