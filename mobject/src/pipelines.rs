@@ -1,7 +1,10 @@
 use std::ffi::CString;
+use std::mem::offset_of;
 
-use ash::vk::{self, Buffer, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, PipelineTessellationStateCreateInfo, PipelineDepthStencilStateCreateInfo};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
 use ash::Device;
+use nalgebra_glm::pi;
+use crate::shapes::{BuiltShape, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders};
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
@@ -13,7 +16,9 @@ pub enum Pipelines {
     Curved
 }
 
-pub struct PrimitivePipeline {
+pub struct PrimitivePipeline<'a> {
+    device: &'a Device,
+    extent: Extent2D,
     vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
     vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
@@ -24,6 +29,8 @@ pub struct PrimitivePipeline {
     framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
     descriptor_set_layout: DescriptorSetLayout,
     descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+    pipeline: Pipeline,
+    pipeline_layout: PipelineLayout
 }
 
 struct CompletePipeline<'a> {
@@ -34,8 +41,8 @@ struct CompletePipeline<'a> {
     tese_path: Option<&'a str>,
     vertex_binding_description: VertexInputBindingDescription,
     vertex_attribute_description: [VertexInputAttributeDescription; MAX_FRAMES_IN_FLIGHT as usize],
+    topology: PrimitiveTopology,
     render_pass: RenderPass,
-    descriptor_set: DescriptorSet
 }
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
@@ -127,7 +134,7 @@ fn create_graphics_pipeline(
 
     let input_assembly_info = PipelineInputAssemblyStateCreateInfo {
         s_type: StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        topology: PrimitiveTopology::PATCH_LIST,
+        topology: pipeline_info.topology,
         primitive_restart_enable: vk::FALSE,
         ..Default::default()
     };
@@ -256,8 +263,27 @@ impl PrimitivePipeline {
         );
 
         let descriptor_sets = shaders::scene_descriptor_sets(logical_device, descriptor_set_layout, descriptor_pool, &uniform_buffers);
-
+        let pipeline_info = CompletePipeline {
+            extent,
+            vertex_path: "shaders/vert.spv",
+            fragment_path: "shaders/frag.spv",
+            tesc_path: None,
+            tese_path: None,
+            vertex_binding_description: Self::vertex_binding_description(),
+            vertex_attribute_description: Self::vertex_attribute_description(),
+            topology: PrimitiveTopology::TRIANGLE_LIST,
+            render_pass,
+        };
+        let (pipeline, layout) = create_graphics_pipeline(
+            logical_device,
+            extent,
+            pipeline_info,
+            render_pass,
+            descriptor_set_layout
+        );
         Self {
+            device: logical_device,
+            extent,
             vertex_buffers,
             vertex_buffer_memories,
             index_buffers,
@@ -267,7 +293,78 @@ impl PrimitivePipeline {
             render_pass,
             framebuffers,
             descriptor_set_layout,
-            descriptor_sets
+            descriptor_sets,
+            pipeline,
+            pipeline_layout: layout
         }
+    }
+
+    pub fn draw_frame(
+        &self,
+        cmd_buffer: CommandBuffer,
+        frame_index: usize,
+        scene_descriptor_set: DescriptorSet,
+        // TODO: annotate with primitive trait as well
+        mobjects: &[Box<dyn BuiltShape>]
+    ) {
+        let cmd_begin_info = CommandBufferBeginInfo {
+            s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
+            ..Default::default()
+        };
+        unsafe { self.device.begin_command_buffer(cmd_buffer, &cmd_begin_info) };
+        let clear_colors = [
+            ClearValue {
+                color: ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0]
+                },
+            },
+            ClearValue {
+                depth_stencil: ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0
+                }
+            }
+        ];
+
+        let render_pass_begin_info = RenderPassBeginInfo {
+            s_type: StructureType::RENDER_PASS_BEGIN_INFO,
+            render_pass: self.render_pass,
+            framebuffer: self.framebuffers[frame_index],
+            render_area: Rect2D { offset: Offset2D { x: 0, y: 0 }, extent: self.extent },
+            clear_value_count: clear_colors.len() as u32,
+            p_clear_values: clear_colors.as_ptr(),
+            ..Default::default()
+        };
+    }
+
+    fn vertex_binding_description() -> VertexInputBindingDescription {
+        VertexInputBindingDescription {
+            binding: 0,
+            stride: size_of::<Vertex2D>() as u32,
+            input_rate: vk::VertexInputRate::VERTEX,
+        }
+    }
+
+    fn vertex_attribute_description() -> [VertexInputAttributeDescription; 3] {
+        [
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 0,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex2D, position) as u32,
+            },
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 1,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex2D, color) as u32,
+            },
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 2,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: offset_of!(Vertex2D, tex_coord) as u32,
+            },
+        ]
     }
 }

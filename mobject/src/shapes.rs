@@ -34,9 +34,9 @@ pub struct GlobalUBO {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Vertex2D {
-    position: Vec3,
-    color: Vec3,
-    tex_coord: Vec2,
+    pub position: Vec3,
+    pub color: Vec3,
+    pub tex_coord: Vec2,
 }
 
 impl Vertex2D {
