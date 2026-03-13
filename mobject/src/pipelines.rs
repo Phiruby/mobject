@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::mem::offset_of;
 
-use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
 use ash::Device;
 use nalgebra_glm::pi;
 use crate::shapes::{BuiltShape, Vertex2D};
@@ -16,13 +16,13 @@ pub enum Pipelines {
     Curved
 }
 
-pub struct PrimitivePipeline<'a> {
-    device: &'a Device,
+pub struct PrimitivePipeline {
+    // device: &'a Device,
     extent: Extent2D,
-    vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-    vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
-    index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-    index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    pub vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    pub vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    pub index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    pub index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
     uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
@@ -60,6 +60,30 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
         ..Default::default()
     };
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
+}
+
+fn bind_mobject_descriptor_sets(
+    device: &Device,
+    cmd_buffer: CommandBuffer,
+    pipeline_layout: PipelineLayout,
+    mobjects: &[Box<dyn BuiltShape>],
+    mobject_descriptor_sets: &[DescriptorSet]
+) {
+    assert_eq!(mobjects.len(), mobject_descriptor_sets.len());
+    let mut cummulative_indices = 0;
+    mobject_descriptor_sets
+    .iter()
+    .zip(mobjects)
+    .for_each(|(&descriptor_set, mobj)| {
+        unsafe {
+            device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, pipeline_layout, 1, &[descriptor_set], &[])
+        };
+        let nindices = mobj.indices().len() as u32;
+        unsafe {
+            device.cmd_draw_indexed(cmd_buffer, nindices, 1, cummulative_indices, 0, 0)
+        };
+        cummulative_indices += nindices;
+    });
 }
 
 
@@ -248,7 +272,7 @@ impl PrimitivePipeline {
 
         // TODO: unhardcode 10; use structure size
         let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, 10);
-
+        let descriptor_pool = shaders::scene_descriptor_pool(logical_device);
         let descriptor_set_layout = shaders::create_description_set_layout(
             logical_device,
             [
@@ -282,7 +306,6 @@ impl PrimitivePipeline {
             descriptor_set_layout
         );
         Self {
-            device: logical_device,
             extent,
             vertex_buffers,
             vertex_buffer_memories,
@@ -301,17 +324,19 @@ impl PrimitivePipeline {
 
     pub fn draw_frame(
         &self,
+        device: &Device,
         cmd_buffer: CommandBuffer,
         frame_index: usize,
         scene_descriptor_set: DescriptorSet,
         // TODO: annotate with primitive trait as well
-        mobjects: &[Box<dyn BuiltShape>]
+        mobjects: &[Box<dyn BuiltShape>],
+        mobject_descriptor_sets: &[DescriptorSet]
     ) {
         let cmd_begin_info = CommandBufferBeginInfo {
             s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
             ..Default::default()
         };
-        unsafe { self.device.begin_command_buffer(cmd_buffer, &cmd_begin_info) };
+        unsafe { device.begin_command_buffer(cmd_buffer, &cmd_begin_info) }.unwrap();
         let clear_colors = [
             ClearValue {
                 color: ClearColorValue {
@@ -335,6 +360,33 @@ impl PrimitivePipeline {
             p_clear_values: clear_colors.as_ptr(),
             ..Default::default()
         };
+
+        unsafe {
+            device.cmd_begin_render_pass(cmd_buffer, &render_pass_begin_info, SubpassContents::INLINE)
+        };
+
+        unsafe {
+            device.cmd_bind_pipeline(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline)
+        };
+
+        let vertex_buffer = self.vertex_buffers[frame_index];
+        let index_buffer = self.index_buffers[frame_index];
+        unsafe {
+            device.cmd_bind_vertex_buffers(cmd_buffer, 0, &[vertex_buffer], &[0])
+        };
+        unsafe {
+            device.cmd_bind_index_buffer(cmd_buffer, index_buffer, 0, IndexType::UINT32)
+        };
+        // bind scene-level info
+        unsafe {
+            device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline_layout, 0, &[scene_descriptor_set], &[])
+        };
+
+        bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets);
+
+        unsafe { device.cmd_end_render_pass(cmd_buffer) };
+        unsafe { device.end_command_buffer(cmd_buffer)}.unwrap();
+
     }
 
     fn vertex_binding_description() -> VertexInputBindingDescription {
