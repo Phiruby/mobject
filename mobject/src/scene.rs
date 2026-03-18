@@ -8,6 +8,7 @@ use crate::pipelines::{Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
+use std::collections::HashMap;
 use std::ffi::{CString, c_void};
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
@@ -279,7 +280,6 @@ impl Scene {
         match action {
             Action::AddMobject(mobj) => {
                 self.mobjects.push(mobj.build(&self.device, self.physical_device_properties));
-                // let (uniform_buffer, _, _) = self.mobjects.last().unwrap().get_uniform_buffer();
                 self.mobject_descriptor_sets.push(
                     self.make_mobject_descriptor_set(self.mobjects.last().unwrap())
                 );
@@ -326,15 +326,28 @@ impl Scene {
         }
     }
 
+    fn group_mobjects(mobjects: &[Box<dyn BuiltShape>]) -> HashMap<Pipelines, Vec<&Box<dyn BuiltShape>>> {
+        let mut map: HashMap<Pipelines, Vec<&Box<dyn BuiltShape>>> = HashMap::new();
+        mobjects
+            .iter()
+            .for_each(|mobj| {
+                let pipeline = mobj.get_pipeline();
+                map.entry(pipeline)
+                    .or_insert_with(Vec::new)
+                    .push(mobj);
+            });
+        map
+    }
+
+    fn draw_mobjects(&self, current_frame: usize, pipeline: Pipelines, mobjects: &[&Box<dyn BuiltShape>]) {
+        let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(mobjects);
+        match pipeline {
+            Pipelines::Primitive => self.primitive_pipeline.fill_buffers(current_frame, &self.device, &vertices, &indices, mobjects),
+            _ => panic!("The desired pipeline not implemented yet!")
+        };
+    }
+
     fn draw_frame(&mut self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
-        // let vertex_buffer = self.vertex_buffers[current_frame];
-        // let vertex_buffer_memory = self.vertex_buffer_memory[current_frame];
-        // let index_buffer = self.index_buffers[current_frame];
-        // let index_buffer_memory = self.index_buffer_memory[current_frame];
-        let vertex_buffer = self.primitive_pipeline.vertex_buffers[current_frame];
-        let vertex_buffer_memory = self.primitive_pipeline.vertex_buffer_memories[current_frame];
-        let index_buffer = self.primitive_pipeline.index_buffers[current_frame];
-        let index_buffer_memory = self.primitive_pipeline.index_buffer_memories[current_frame];
 
         let sync = &self.sync[current_frame];
         let command_buffer = self.command_buffer[current_frame];
@@ -345,18 +358,18 @@ impl Scene {
         }
         .unwrap();
         unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
-        let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&self.mobjects);
-        window::fill_vertex_buffer(&self.device, vertex_buffer_memory, &vertices);
-        window::fill_index_buffer(&self.device, index_buffer_memory, &indices);
+        // TODO: move out of this struct
+        let grouped_mobjects = Scene::group_mobjects(&self.mobjects);
+
+        for (&pipeline_kind, mobjs) in grouped_mobjects.iter() {
+            self.draw_mobjects(current_frame, pipeline_kind, &mobjs);
+        }
+
         window::fill_uniform_buffer(
             self.uniform_buffer_mapped_memories[current_frame],
             &self.global_ubo,
         );
 
-        self.mobjects.iter().for_each(|mob| {
-            let (_, _, mapped_memory) = mob.get_uniform_buffer();
-            window::fill_uniform_buffer(mapped_memory[current_frame], mob.get_ubo_contents());
-        });
         let (image_index, _suboptimal) = unsafe {
             self.swapchain_device.acquire_next_image(
                 self.swapchain,

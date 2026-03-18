@@ -1,15 +1,16 @@
-use std::ffi::CString;
+use std::ffi::{CString, c_void};
 use std::mem::offset_of;
+use std::ptr::copy_nonoverlapping;
 
-use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, MemoryMapFlags, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
 use crate::shapes::{BuiltShape, Vertex2D};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
 /// adhered. Each mobject implementing a specific pipeline is responsible
 /// to follow this layout.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Pipelines {
     Primitive,
     Curved
@@ -24,6 +25,7 @@ pub struct PrimitivePipeline {
     pub index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
     uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffer_mapped_memories: [*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
     framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_set_layout: DescriptorSetLayout,
@@ -339,6 +341,7 @@ impl PrimitivePipeline {
             index_buffer_memories,
             uniform_buffers,
             uniform_buffer_memories,
+            uniform_buffer_mapped_memories: ubo_mapped_memories,
             render_pass,
             framebuffers,
             mobject_descriptor_set_layout,
@@ -459,6 +462,20 @@ impl PrimitivePipeline {
         unsafe { device.cmd_end_render_pass(cmd_buffer) };
         unsafe { device.end_command_buffer(cmd_buffer)}.unwrap();
 
+    }
+
+    /// Fills the index, vertex, and uniform buffers
+    pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[Vertex2D], indices: &[u32], mobjects: &[&Box<dyn BuiltShape>]) {
+        window::fill_vertex_buffer(device, self.vertex_buffer_memories[frame_index], vertices);
+        window::fill_index_buffer(device, self.index_buffer_memories[frame_index], indices);
+        mobjects
+            .iter()
+            .for_each(|mobj| {
+                window::fill_uniform_buffer(
+                    self.uniform_buffer_mapped_memories[frame_index],
+                    mobj.get_ubo_contents()
+                );
+            });
     }
 
     fn vertex_binding_description() -> VertexInputBindingDescription {

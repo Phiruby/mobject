@@ -109,7 +109,7 @@ pub trait Shape {
 
 
 pub fn mobjects_to_vertices_and_indices(
-    mobjects: &[Box<dyn BuiltShape>],
+    mobjects: &[&Box<dyn BuiltShape>],
 ) -> (Vec<Vertex2D>, Vec<u32>) {
     let mut vertices: Vec<Vertex2D> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
