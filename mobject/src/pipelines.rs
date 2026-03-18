@@ -1,9 +1,8 @@
 use std::ffi::CString;
 use std::mem::offset_of;
 
-use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
-use nalgebra_glm::pi;
 use crate::shapes::{BuiltShape, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders};
 /// This specifies the kind of pipeline the mobject needs to be rendered
@@ -28,7 +27,7 @@ pub struct PrimitivePipeline {
     render_pass: RenderPass,
     framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_set_layout: DescriptorSetLayout,
-    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+    mobject_descriptor_pool: DescriptorPool,
     pipeline: Pipeline,
     pipeline_layout: PipelineLayout
 }
@@ -84,6 +83,20 @@ fn bind_mobject_descriptor_sets(
         };
         cummulative_indices += nindices;
     });
+}
+
+fn mobject_descriptor_pool(device: &Device, n_objects: u32, pools: &[DescriptorPoolSize]) -> DescriptorPool {
+    let pool_info = DescriptorPoolCreateInfo {
+        s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+        pool_size_count: pools.len() as u32,
+        p_pool_sizes: pools.as_ptr(),
+        max_sets: n_objects * MAX_FRAMES_IN_FLIGHT,
+        ..Default::default()
+    };
+    unsafe {
+        device.create_descriptor_pool(&pool_info, None)
+        .unwrap()
+    }
 }
 
 
@@ -276,7 +289,6 @@ impl PrimitivePipeline {
 
         // TODO: unhardcode 10; use structure size
         let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, 10);
-        let descriptor_pool = shaders::scene_descriptor_pool(logical_device);
         let mobject_descriptor_set_layout = shaders::create_description_set_layout(
             logical_device,
             [
@@ -289,8 +301,17 @@ impl PrimitivePipeline {
                 }
             ].to_vec()
         );
+        let mobject_descriptor_pool = mobject_descriptor_pool(
+            logical_device,
+            10,
+            &[
+                DescriptorPoolSize {
+                    ty: DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: 10 * MAX_FRAMES_IN_FLIGHT
+                }
+            ]
+        );
 
-        let descriptor_sets = shaders::scene_descriptor_sets(logical_device, mobject_descriptor_set_layout, descriptor_pool, &uniform_buffers);
         let pipeline_info = CompletePipeline {
             extent,
             vertex_path: "shaders/vert.spv",
@@ -321,14 +342,57 @@ impl PrimitivePipeline {
             render_pass,
             framebuffers,
             mobject_descriptor_set_layout,
-            descriptor_sets,
+            mobject_descriptor_pool,
             pipeline,
             pipeline_layout: layout
         }
     }
 
-    pub fn mobject_descriptor_set_layout(&self) -> DescriptorSetLayout {
-        self.mobject_descriptor_set_layout
+    pub fn create_mobject_descriptor_sets(
+        &self,
+        device: &Device,
+        uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    ) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+        let layouts = [
+            self.mobject_descriptor_set_layout;
+            MAX_FRAMES_IN_FLIGHT as usize
+        ];
+        let alloc_info = DescriptorSetAllocateInfo {
+            s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+            descriptor_pool: self.mobject_descriptor_pool,
+            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+            p_set_layouts: layouts.as_ptr(),
+            ..Default::default()
+        };
+        let descriptor_sets = unsafe {
+            device.allocate_descriptor_sets(&alloc_info)
+            .unwrap()
+        };
+        (0..MAX_FRAMES_IN_FLIGHT)
+            .for_each(|i| {
+                let uniform_buffer_info = DescriptorBufferInfo {
+                    buffer: uniform_buffers[i as usize],
+                    offset: 0,
+                    range: vk::WHOLE_SIZE
+                };
+                let write_op = [
+                    WriteDescriptorSet {
+                        s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                        dst_set: descriptor_sets[i as usize],
+                        dst_binding: 0,
+                        dst_array_element: 0,
+                        descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                        descriptor_count: 1,
+                        p_buffer_info: &uniform_buffer_info,
+                        ..Default::default()
+                    }
+                ];
+                unsafe {
+                    device.update_descriptor_sets(&write_op, &[]);
+                }
+            });
+        descriptor_sets.try_into().unwrap()
+
     }
     pub fn draw_frame(
         &self,

@@ -87,30 +87,6 @@ pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
 }
 
-pub fn mobject_descriptor_pool(device: &Device, n_objects: u32) -> DescriptorPool {
-    let max_frames_in_flight = MAX_FRAMES_IN_FLIGHT as usize;
-    let pool_sizes = [
-        DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: n_objects * MAX_FRAMES_IN_FLIGHT,
-        },
-        DescriptorPoolSize {
-            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: n_objects * MAX_FRAMES_IN_FLIGHT,
-        },
-    ];
-    let pool_info = DescriptorPoolCreateInfo {
-        s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-        pool_size_count: pool_sizes.len() as u32,
-        p_pool_sizes: pool_sizes.as_ptr(),
-        // TODO: this should be MAX_FRAMES_IN_FLIGHT * num objects, since those are the
-        // amount of times this will be used to allocate descriptor sets
-        max_sets: n_objects * MAX_FRAMES_IN_FLIGHT,
-        ..Default::default()
-    };
-    unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()
-}
-
 pub fn scene_descriptor_sets(
     device: &Device,
     scene_descriptor_set_layout: DescriptorSetLayout,

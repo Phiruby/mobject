@@ -4,7 +4,7 @@ use ash::vk::{
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
 use crate::device::QueueFamilies;
-use crate::pipelines::PrimitivePipeline;
+use crate::pipelines::{Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
@@ -60,7 +60,6 @@ pub struct Scene {
     texture_sampler: Sampler,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
-    mobject_descriptor_pool: DescriptorPool,
     mobject_descriptor_set_layout: DescriptorSetLayout,
     extent: Extent2D,
     // graphics_pipeline: Pipeline,
@@ -212,17 +211,9 @@ impl Scene {
             ]
             .to_vec(),
         );
-        // TODO: unhardcode 10
-        let mobject_descriptor_pool =
-            shaders::mobject_descriptor_pool(&logical_device, 10 as u32);
+
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
-        // let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
-        //     &logical_device,
-        //     extent,
-        //     render_pass,
-        //     scene_descriptor_set_layout,
-        //     mobject_descriptor_set_layout,
-        // );
+
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
@@ -238,11 +229,6 @@ impl Scene {
             command_buffer,
             swapchain,
             render_pass,
-            // framebuffers,
-            // vertex_buffers,
-            // vertex_buffer_memory: vertex_buffer_memories,
-            // index_buffers,
-            // index_buffer_memory,
             texture_sampler: sampler,
             uniform_buffers: uniform_buffers.to_vec(),
             uniform_buffer_memories: uniform_buffer_memories.to_vec(),
@@ -255,10 +241,8 @@ impl Scene {
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             mobject_descriptor_sets,
-            mobject_descriptor_pool,
             mobject_descriptor_set_layout,
             extent,
-            // graphics_pipeline,
             queue_families,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
@@ -272,7 +256,6 @@ impl Scene {
                     10.0,
                 )),
             },
-            // pipeline_layout,
             physical_device_properties: physical_device_memory_properties,
             primitive_pipeline
         }
@@ -296,20 +279,23 @@ impl Scene {
         match action {
             Action::AddMobject(mobj) => {
                 self.mobjects.push(mobj.build(&self.device, self.physical_device_properties));
-                let (uniform_buffer, _, _) = self.mobjects.last().unwrap().get_uniform_buffer();
+                // let (uniform_buffer, _, _) = self.mobjects.last().unwrap().get_uniform_buffer();
                 self.mobject_descriptor_sets.push(
-                    shaders::mobject_descriptor_sets(
-                        &self.device,
-                        self.mobject_descriptor_set_layout,
-                        self.mobject_descriptor_pool,
-                        uniform_buffer,
-                        self.texture_image_view,
-                        self.texture_sampler,
-                    )
+                    self.make_mobject_descriptor_set(self.mobjects.last().unwrap())
                 );
             },
             Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
         }
+    }
+
+    fn make_mobject_descriptor_set(&self, mobject: &Box<dyn BuiltShape>) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+        let pipeline = mobject.get_pipeline();
+        let (uniform_buffers, _, _) = mobject.get_uniform_buffer();
+        let built_descriptor_sets = match pipeline {
+            Pipelines::Primitive => self.primitive_pipeline.create_mobject_descriptor_sets(&self.device, uniform_buffers),
+            Pipelines::Curved => panic!("Curved pipeline not ready yet")
+        };
+        built_descriptor_sets
     }
 
     pub fn main_loop(&mut self) {
