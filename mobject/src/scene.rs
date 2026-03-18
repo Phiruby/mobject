@@ -63,10 +63,10 @@ pub struct Scene {
     mobject_descriptor_pool: DescriptorPool,
     mobject_descriptor_set_layout: DescriptorSetLayout,
     extent: Extent2D,
-    graphics_pipeline: Pipeline,
+    // graphics_pipeline: Pipeline,
     queue_families: QueueFamilies,
     global_ubo: GlobalUBO,
-    pipeline_layout: PipelineLayout,
+    // pipeline_layout: PipelineLayout,
     physical_device_properties: PhysicalDeviceMemoryProperties,
     primitive_pipeline: PrimitivePipeline
 }
@@ -195,7 +195,7 @@ impl Scene {
             100,
             render_pass,
             framebuffers.try_into().unwrap(),
-            scene_descriptor_pool,
+            scene_descriptor_set_layout,
             extent,
             physical_device_memory_properties
         );
@@ -206,15 +206,7 @@ impl Scene {
                     binding: 0,
                     descriptor_type: DescriptorType::UNIFORM_BUFFER,
                     descriptor_count: 1,
-                    stage_flags: ShaderStageFlags::VERTEX
-                        | ShaderStageFlags::TESSELLATION_EVALUATION,
-                    ..Default::default()
-                },
-                DescriptorSetLayoutBinding {
-                    binding: 1,
-                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: 1,
-                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    stage_flags: ShaderStageFlags::VERTEX,
                     ..Default::default()
                 },
             ]
@@ -224,13 +216,13 @@ impl Scene {
         let mobject_descriptor_pool =
             shaders::mobject_descriptor_pool(&logical_device, 10 as u32);
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
-        let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
-            &logical_device,
-            extent,
-            render_pass,
-            scene_descriptor_set_layout,
-            mobject_descriptor_set_layout,
-        );
+        // let (graphics_pipeline, pipeline_layout) = shaders::create_graphics_pipeline(
+        //     &logical_device,
+        //     extent,
+        //     render_pass,
+        //     scene_descriptor_set_layout,
+        //     mobject_descriptor_set_layout,
+        // );
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
@@ -266,7 +258,7 @@ impl Scene {
             mobject_descriptor_pool,
             mobject_descriptor_set_layout,
             extent,
-            graphics_pipeline,
+            // graphics_pipeline,
             queue_families,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
@@ -280,7 +272,7 @@ impl Scene {
                     10.0,
                 )),
             },
-            pipeline_layout,
+            // pipeline_layout,
             physical_device_properties: physical_device_memory_properties,
             primitive_pipeline
         }

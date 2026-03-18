@@ -27,7 +27,7 @@ pub struct PrimitivePipeline {
     uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
     framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
-    descriptor_set_layout: DescriptorSetLayout,
+    mobject_descriptor_set_layout: DescriptorSetLayout,
     descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     pipeline: Pipeline,
     pipeline_layout: PipelineLayout
@@ -92,7 +92,8 @@ fn create_graphics_pipeline(
     extent: Extent2D,
     pipeline_info: CompletePipeline,
     render_pass: RenderPass,
-    descriptor_set_layout: DescriptorSetLayout
+    mobject_descriptor_set_layout: DescriptorSetLayout,
+    scene_descriptor_set_layout: DescriptorSetLayout
 ) -> (Pipeline, PipelineLayout) {
     let vertex_bytes = std::fs::read(pipeline_info.vertex_path).unwrap();
     let vertex_shader_module = create_shader_module(vertex_bytes, device);
@@ -200,7 +201,10 @@ fn create_graphics_pipeline(
         ..Default::default()
     };
 
-    let descriptor_set_layouts = [descriptor_set_layout];
+    let descriptor_set_layouts = [
+        scene_descriptor_set_layout,
+        mobject_descriptor_set_layout
+    ];
     let pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
         set_layout_count: descriptor_set_layouts.len() as u32,
@@ -262,7 +266,7 @@ impl PrimitivePipeline {
         // TODO: the pipeline should create its own render pass?
         render_pass: RenderPass,
         framebuffers: [Framebuffer; 3],
-        descriptor_pool: DescriptorPool,
+        scene_descriptor_layout: DescriptorSetLayout,
         extent: Extent2D,
         physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     ) -> Self {
@@ -273,7 +277,7 @@ impl PrimitivePipeline {
         // TODO: unhardcode 10; use structure size
         let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, 10);
         let descriptor_pool = shaders::scene_descriptor_pool(logical_device);
-        let descriptor_set_layout = shaders::create_description_set_layout(
+        let mobject_descriptor_set_layout = shaders::create_description_set_layout(
             logical_device,
             [
                 DescriptorSetLayoutBinding {
@@ -286,7 +290,7 @@ impl PrimitivePipeline {
             ].to_vec()
         );
 
-        let descriptor_sets = shaders::scene_descriptor_sets(logical_device, descriptor_set_layout, descriptor_pool, &uniform_buffers);
+        let descriptor_sets = shaders::scene_descriptor_sets(logical_device, mobject_descriptor_set_layout, descriptor_pool, &uniform_buffers);
         let pipeline_info = CompletePipeline {
             extent,
             vertex_path: "shaders/vert.spv",
@@ -303,7 +307,8 @@ impl PrimitivePipeline {
             extent,
             pipeline_info,
             render_pass,
-            descriptor_set_layout
+            mobject_descriptor_set_layout,
+            scene_descriptor_layout
         );
         Self {
             extent,
@@ -315,13 +320,16 @@ impl PrimitivePipeline {
             uniform_buffer_memories,
             render_pass,
             framebuffers,
-            descriptor_set_layout,
+            mobject_descriptor_set_layout,
             descriptor_sets,
             pipeline,
             pipeline_layout: layout
         }
     }
 
+    pub fn mobject_descriptor_set_layout(&self) -> DescriptorSetLayout {
+        self.mobject_descriptor_set_layout
+    }
     pub fn draw_frame(
         &self,
         device: &Device,

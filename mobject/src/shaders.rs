@@ -172,11 +172,6 @@ pub fn mobject_descriptor_sets(
             offset: 0,
             range: vk::WHOLE_SIZE,
         };
-        let image_info = DescriptorImageInfo {
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            image_view: texture_image_view,
-            sampler,
-        };
         let descriptor_writes = [
             WriteDescriptorSet {
                 s_type: StructureType::WRITE_DESCRIPTOR_SET,
@@ -186,16 +181,6 @@ pub fn mobject_descriptor_sets(
                 descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
                 descriptor_count: 1,
                 p_buffer_info: &buffer_info,
-                ..Default::default()
-            },
-            WriteDescriptorSet {
-                s_type: StructureType::WRITE_DESCRIPTOR_SET,
-                dst_set: descriptor_setes[i as usize],
-                dst_binding: 1,
-                dst_array_element: 0,
-                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 1,
-                p_image_info: &image_info,
                 ..Default::default()
             },
         ];
