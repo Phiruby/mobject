@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -33,6 +33,12 @@ enum SceneState {
     Moving
 }
 
+struct Texture {
+    view: ImageView,
+    image: Image,
+    memory: DeviceMemory
+}
+
 pub struct Scene {
     state: SceneState,
     mobjects: Vec<Box<dyn BuiltShape>>,
@@ -44,31 +50,22 @@ pub struct Scene {
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
-    // framebuffers: Vec<Framebuffer>,
-    // vertex_buffers: Vec<Buffer>,
-    // vertex_buffer_memory: Vec<DeviceMemory>,
-    // index_buffers: Vec<Buffer>,
-    // index_buffer_memory: Vec<DeviceMemory>,
     _image: Image,
     _image_memory: DeviceMemory,
-    uniform_buffers: Vec<Buffer>,
-    uniform_buffer_memories: Vec<DeviceMemory>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
-    texture_image_view: ImageView,
     depth_image: Image,
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
-    texture_sampler: Sampler,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
-    mobject_descriptor_set_layout: DescriptorSetLayout,
     extent: Extent2D,
-    // graphics_pipeline: Pipeline,
+    textures: HashMap<String, Texture>,
     queue_families: QueueFamilies,
     global_ubo: GlobalUBO,
-    // pipeline_layout: PipelineLayout,
     physical_device_properties: PhysicalDeviceMemoryProperties,
-    primitive_pipeline: PrimitivePipeline
+    primitive_pipeline: PrimitivePipeline,
+    graphics_queue: Queue,
+    cmd_pool: CommandPool
 }
 
 impl Scene {
@@ -137,16 +134,6 @@ impl Scene {
         let texture_image_view =
             texture::create_texture_image_view(&logical_device, image, mip_levels);
         let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
-        let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(
-            &logical_device,
-            60_000,
-            physical_device_memory_properties,
-        );
-        let (index_buffers, index_buffer_memory) = buffers::create_index_buffers(
-            &logical_device,
-            60_000,
-            physical_device_memory_properties,
-        );
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 &logical_device,
@@ -199,19 +186,6 @@ impl Scene {
             extent,
             physical_device_memory_properties
         );
-        let mobject_descriptor_set_layout = shaders::create_description_set_layout(
-            &logical_device,
-            [
-                DescriptorSetLayoutBinding {
-                    binding: 0,
-                    descriptor_type: DescriptorType::UNIFORM_BUFFER,
-                    descriptor_count: 1,
-                    stage_flags: ShaderStageFlags::VERTEX,
-                    ..Default::default()
-                },
-            ]
-            .to_vec(),
-        );
 
         let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
 
@@ -230,20 +204,16 @@ impl Scene {
             command_buffer,
             swapchain,
             render_pass,
-            texture_sampler: sampler,
-            uniform_buffers: uniform_buffers.to_vec(),
-            uniform_buffer_memories: uniform_buffer_memories.to_vec(),
             _image: image,
             _image_memory: image_memory,
-            texture_image_view,
             depth_image,
             depth_image_view,
             depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             mobject_descriptor_sets,
-            mobject_descriptor_set_layout,
             extent,
+            textures: HashMap::new(),
             queue_families,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
@@ -258,11 +228,22 @@ impl Scene {
                 )),
             },
             physical_device_properties: physical_device_memory_properties,
-            primitive_pipeline
+            primitive_pipeline,
+            graphics_queue,
+            cmd_pool: pool
         }
     }
 
     pub fn add(&mut self, mobject: Box<dyn Shape>) {
+        let texture_path = mobject.texture_path();
+        if let Some(pt) = texture_path {
+
+            let (image, memory, mip_levels) = texture::create_texture_image(&self.device, pt, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
+            let texture_image_view =
+            texture::create_texture_image_view(&self.device, image, mip_levels);
+            self.textures.insert(pt.to_string(), Texture { view: texture_image_view, image, memory });
+
+        }
         self.actions.push(Action::AddMobject(mobject));
     }
     pub fn wait(&mut self, seconds: u8) {

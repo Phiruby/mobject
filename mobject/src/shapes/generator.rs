@@ -17,7 +17,7 @@ macro_rules! define_shape {
         $vis struct $name {
             pub vertices: $vty,
             pub indices:  $ity,
-
+            texture_path: Option<String>,
             uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -34,8 +34,19 @@ macro_rules! define_shape {
                     uniform_buffer_memories: None,
                     uniform_mapped_memories: None,
                     ubo,
+                    texture_path: None,
                     pipeline: $pipeline
                 }
+            }
+
+            pub fn with_texture(vertices: $vty, indices: $ity, image_path: String) -> Self {
+                let mut me = Self::with_ubo(
+                    vertices,
+                    indices,
+                    UBO { model: glm::identity() },
+                );
+                me.texture_path = Some(image_path);
+                me
             }
 
             pub fn with_indices(vertices: $vty, indices: $ity) -> Self {
@@ -75,6 +86,10 @@ macro_rules! define_shape {
                 this.uniform_mapped_memories = Some(uniform_mapped_memories);
 
                 Box::new(this)
+            }
+
+            fn texture_path(&self) -> Option<&str> {
+                self.texture_path.as_deref()
             }
         }
 

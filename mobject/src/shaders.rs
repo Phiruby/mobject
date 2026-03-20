@@ -17,7 +17,7 @@ use ash::vk::{
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;
-use crate::shapes::{Shape, Vertex2D};
+use crate::shapes::{Shape, Vertex, Vertex2D};
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
     let byte_code: Vec<u32> = shader_code

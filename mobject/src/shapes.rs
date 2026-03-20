@@ -12,6 +12,7 @@ use ash::vk::{
 };
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
+use std::ops::Deref;
 use std::{mem::offset_of, os::raw::c_void};
 use crate::pipelines::Pipelines;
 use crate::{MAX_FRAMES_IN_FLIGHT};
@@ -31,6 +32,11 @@ pub struct GlobalUBO {
     pub proj: glm::Mat4,
 }
 
+pub trait Vertex<const N: usize> {
+    fn attribute_descriptions() -> [VertexInputAttributeDescription; N];
+    fn binding_description() -> VertexInputBindingDescription;
+}
+
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct Vertex2D {
@@ -47,7 +53,17 @@ impl Vertex2D {
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
         }
     }
-    pub fn binding_description() -> VertexInputBindingDescription {
+    pub fn update_tex_coord(self, c: Vec2) -> Self {
+        Self {
+            position: self.position,
+            color: self.color,
+            tex_coord: c
+        }
+    }
+}
+
+impl Vertex<3> for Vertex2D {
+    fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
             stride: size_of::<Vertex2D>() as u32,
@@ -55,7 +71,7 @@ impl Vertex2D {
         }
     }
 
-    pub fn attribute_descriptions() -> [VertexInputAttributeDescription; 3] {
+    fn attribute_descriptions() -> [VertexInputAttributeDescription; 3] {
         [
             VertexInputAttributeDescription {
                 binding: 0,
@@ -105,8 +121,8 @@ pub trait Shape {
         device: &Device,
         mem_properties: PhysicalDeviceMemoryProperties,
     ) -> Box<dyn BuiltShape>;
+    fn texture_path(&self) -> Option<&str>;
 }
-
 
 pub fn mobjects_to_vertices_and_indices(
     mobjects: &[&Box<dyn BuiltShape>],
