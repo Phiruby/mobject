@@ -149,13 +149,8 @@ pub fn create_logical_device<S: AsRef<str> + Debug>(
     queues: &QueueFamilies,
     instance: &Instance,
     device: PhysicalDevice,
-    physical_device_features: Option<PhysicalDeviceFeatures>,
     extension_names: Option<Vec<S>>,
 ) -> Device {
-    let device_features = match physical_device_features {
-        Some(x) => x,
-        _ => PhysicalDeviceFeatures::default(),
-    };
     // need to maintain both vars since they are used during creation of device
     let (indexing_features, _descriptor_index_features) = enable_descriptor_indexing(device, instance);
     let device_extensions = match extension_names {
@@ -178,7 +173,6 @@ pub fn create_logical_device<S: AsRef<str> + Debug>(
         queue_create_info_count: queue_create_infos.len() as u32,
         pp_enabled_extension_names: device_extension_ptrs.as_ptr(),
         enabled_extension_count: device_extensions.len() as u32,
-        p_enabled_features: &device_features,
         p_next: indexing_features.as_ref() as *const _ as *const c_void,
         ..Default::default()
     };

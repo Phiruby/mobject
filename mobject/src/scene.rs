@@ -88,12 +88,6 @@ impl Scene {
             &queue_families,
             &instance,
             physical_device,
-            // NOTE: this is needed for texture anisotropy sampling
-            Some(PhysicalDeviceFeatures {
-                sampler_anisotropy: vk::TRUE,
-                tessellation_shader: vk::TRUE,
-                ..Default::default()
-            }),
             Some(DEVICE_EXTENSIONS.to_vec()),
         );
         let swapchain_device = khr::swapchain::Device::new(&instance, &logical_device);
