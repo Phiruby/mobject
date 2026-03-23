@@ -67,6 +67,12 @@ impl Rectangle {
     pub fn load(vertices: [Vertex2D; 4]) -> Self {
         Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
     }
+    pub fn include_texture(self, path: String) -> Self {
+        Self {
+            texture_path: Some(path),
+            ..self
+        }
+    }
 }
 
 impl Default for Rectangle {

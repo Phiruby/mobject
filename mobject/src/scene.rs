@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -60,6 +60,7 @@ pub struct Scene {
     mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     extent: Extent2D,
     textures: HashMap<String, Texture>,
+    texture_sampler: Sampler,
     queue_families: QueueFamilies,
     global_ubo: GlobalUBO,
     physical_device_properties: PhysicalDeviceMemoryProperties,
@@ -150,6 +151,7 @@ impl Scene {
             depth_image_view,
             extent,
         );
+        let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [
@@ -159,11 +161,19 @@ impl Scene {
                     descriptor_count: 1,
                     stage_flags: ShaderStageFlags::VERTEX | ShaderStageFlags::TESSELLATION_EVALUATION,
                     ..Default::default()
+                },
+                DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
                 }
             ]
             .to_vec(),
             Some(
                 [
+                    DescriptorBindingFlags::empty(),
                     DescriptorBindingFlags::PARTIALLY_BOUND | DescriptorBindingFlags::UPDATE_AFTER_BIND
                 ]
                 .to_vec()
@@ -222,6 +232,7 @@ impl Scene {
             mobject_descriptor_sets,
             extent,
             textures: HashMap::new(),
+            texture_sampler,
             queue_families,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
@@ -242,15 +253,42 @@ impl Scene {
         }
     }
 
+    fn add_texture_to_scene(&self, image: Image, memory: DeviceMemory, mip_levels: u32, image_view: ImageView) {
+        self.scene_descriptor_sets
+            .iter()
+            .for_each(|desc_set| {
+
+                let image_info = DescriptorImageInfo {
+                    image_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    image_view: image_view,
+                    sampler: self.texture_sampler,
+                    ..Default::default()
+                };
+                let write = WriteDescriptorSet {
+                    s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                    dst_set: *desc_set,
+                    dst_binding: 1,
+                    dst_array_element: self.textures.len() as u32,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    p_image_info: &image_info,
+                    ..Default::default()
+                };
+                unsafe { self.device.update_descriptor_sets(&[write], &[]) };
+            });
+    }
+
     pub fn add(&mut self, mobject: Box<dyn Shape>) {
         let texture_path = mobject.texture_path();
         if let Some(pt) = texture_path {
 
+            if self.textures.contains_key(pt) { return ;}
+
             let (image, memory, mip_levels) = texture::create_texture_image(&self.device, pt, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
             let texture_image_view =
             texture::create_texture_image_view(&self.device, image, mip_levels);
+            self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
             self.textures.insert(pt.to_string(), Texture { view: texture_image_view, image, memory });
-
         }
         self.actions.push(Action::AddMobject(mobject));
     }

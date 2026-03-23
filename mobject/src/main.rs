@@ -3,7 +3,7 @@ use mobject::shapes::{ObjModel, Points, Rectangle, Shape, Triangle, Vertex2D};
 fn main() {
     println!("Hello, world!");
     // let triangle = Box::new(Triangle::default());
-    let shape = Box::new(Rectangle::default());
+    let shape = Box::new(Rectangle::default().include_texture(String::from("textures/basic.jpg")));
     // let obj = Box::new(ObjModel::new("models/room.obj"));
     // let mobjects: Vec<Box<dyn Shape>> = vec![shape];
     // let bezier_points = Box::new(Points::default());

@@ -79,14 +79,20 @@ pub fn scene_descriptor_pool(
     flags: Option<DescriptorPoolCreateFlags>
 ) -> DescriptorPool {
     let flags = flags.unwrap_or(DescriptorPoolCreateFlags::empty());
-    let pool_sizes = DescriptorPoolSize {
-        ty: vk::DescriptorType::UNIFORM_BUFFER,
-        descriptor_count: MAX_FRAMES_IN_FLIGHT,
-    };
+    let pool_sizes = [
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT,
+        },
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT
+        }
+    ];
     let pool_info = DescriptorPoolCreateInfo {
         s_type: StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-        pool_size_count: 1,
-        p_pool_sizes: &pool_sizes,
+        pool_size_count: pool_sizes.len() as u32,
+        p_pool_sizes: pool_sizes.as_ptr(),
         max_sets: MAX_FRAMES_IN_FLIGHT,
         flags,
         ..Default::default()
