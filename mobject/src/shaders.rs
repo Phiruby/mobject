@@ -1,19 +1,9 @@
 use std::ffi::CString;
+use std::os::raw::c_void;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool,
-    DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
-    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, Extent2D,
-    GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache,
-    PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
-    PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout,
-    PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo,
-    PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
-    PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo,
-    PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D,
-    RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType,
-    Viewport, WriteDescriptorSet,
+    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateInfo, Extent2D, GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;
@@ -62,11 +52,20 @@ pub fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a>
 pub fn create_description_set_layout(
     device: &Device,
     bindings: Vec<DescriptorSetLayoutBinding>,
+    binding_flags: Option<Vec<DescriptorBindingFlags>>
 ) -> DescriptorSetLayout {
+    let flags = binding_flags.unwrap_or_else(Vec::new);
+    let binding_flags_info = DescriptorSetLayoutBindingFlagsCreateInfo {
+        s_type: StructureType::DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        p_binding_flags: flags.as_ptr(),
+        binding_count: flags.len() as u32,
+        ..Default::default()
+    };
     let layout_info = DescriptorSetLayoutCreateInfo {
         s_type: StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         binding_count: bindings.len() as u32,
         p_bindings: bindings.as_ptr(),
+        p_next: (&binding_flags_info as *const DescriptorSetLayoutBindingFlagsCreateInfo) as *const c_void,
         ..Default::default()
     };
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()

@@ -301,7 +301,8 @@ impl PrimitivePipeline {
                     stage_flags: ShaderStageFlags::VERTEX,
                     ..Default::default()
                 }
-            ].to_vec()
+            ].to_vec(),
+            None
         );
         let mobject_descriptor_pool = mobject_descriptor_pool(
             logical_device,
