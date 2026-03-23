@@ -302,6 +302,7 @@ impl PrimitivePipeline {
                     ..Default::default()
                 }
             ].to_vec(),
+            None,
             None
         );
         let mobject_descriptor_pool = mobject_descriptor_pool(

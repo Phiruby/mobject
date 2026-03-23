@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateInfo, Extent2D, GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet
+    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, Extent2D, GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;
@@ -52,9 +52,11 @@ pub fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a>
 pub fn create_description_set_layout(
     device: &Device,
     bindings: Vec<DescriptorSetLayoutBinding>,
-    binding_flags: Option<Vec<DescriptorBindingFlags>>
+    binding_flags: Option<Vec<DescriptorBindingFlags>>,
+    create_flags: Option<DescriptorSetLayoutCreateFlags>,
 ) -> DescriptorSetLayout {
     let flags = binding_flags.unwrap_or_else(Vec::new);
+    let create_flags = create_flags.unwrap_or(DescriptorSetLayoutCreateFlags::empty());
     let binding_flags_info = DescriptorSetLayoutBindingFlagsCreateInfo {
         s_type: StructureType::DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
         p_binding_flags: flags.as_ptr(),
@@ -66,12 +68,17 @@ pub fn create_description_set_layout(
         binding_count: bindings.len() as u32,
         p_bindings: bindings.as_ptr(),
         p_next: (&binding_flags_info as *const DescriptorSetLayoutBindingFlagsCreateInfo) as *const c_void,
+        flags: create_flags,
         ..Default::default()
     };
     unsafe { device.create_descriptor_set_layout(&layout_info, None) }.unwrap()
 }
 
-pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
+pub fn scene_descriptor_pool(
+    device: &Device,
+    flags: Option<DescriptorPoolCreateFlags>
+) -> DescriptorPool {
+    let flags = flags.unwrap_or(DescriptorPoolCreateFlags::empty());
     let pool_sizes = DescriptorPoolSize {
         ty: vk::DescriptorType::UNIFORM_BUFFER,
         descriptor_count: MAX_FRAMES_IN_FLIGHT,
@@ -81,6 +88,7 @@ pub fn scene_descriptor_pool(device: &Device) -> DescriptorPool {
         pool_size_count: 1,
         p_pool_sizes: &pool_sizes,
         max_sets: MAX_FRAMES_IN_FLIGHT,
+        flags,
         ..Default::default()
     };
     unsafe { device.create_descriptor_pool(&pool_info, None) }.unwrap()

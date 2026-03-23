@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorPool, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
+    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -167,10 +167,16 @@ impl Scene {
                     DescriptorBindingFlags::PARTIALLY_BOUND | DescriptorBindingFlags::UPDATE_AFTER_BIND
                 ]
                 .to_vec()
+            ),
+            Some(
+                DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL
             )
         );
 
-        let scene_descriptor_pool = shaders::scene_descriptor_pool(&logical_device);
+        let scene_descriptor_pool = shaders::scene_descriptor_pool(
+            &logical_device,
+            Some(DescriptorPoolCreateFlags::UPDATE_AFTER_BIND)
+        );
         let scene_descriptor_sets = shaders::scene_descriptor_sets(
             &logical_device,
             scene_descriptor_set_layout,
