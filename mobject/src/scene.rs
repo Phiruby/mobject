@@ -165,7 +165,7 @@ impl Scene {
                 DescriptorSetLayoutBinding {
                     binding: 1,
                     descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: 1,
+                    descriptor_count: 10,
                     stage_flags: ShaderStageFlags::FRAGMENT,
                     ..Default::default()
                 }
@@ -300,6 +300,13 @@ impl Scene {
         self.state = state;
     }
 
+    fn add_ones_texture(&mut self) {
+        let (image, memory, mip_levels) = texture::create_ones_texture(&self.device, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
+        let image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
+        self.add_texture_to_scene(image, memory, mip_levels, image_view);
+        self.textures.insert(String::from("blank"), Texture { view: image_view, image, memory });
+    }
+
     fn take_action(&mut self) {
         if self.actions.len() == 0 {return ;}
         // NOTE: going backwards. doing this for now for simplicity
@@ -326,6 +333,7 @@ impl Scene {
     }
 
     pub fn main_loop(&mut self) {
+        self.add_ones_texture();
         // opengl to vulkan conversion (inverted y)
         self.global_ubo.proj.m22 *= -1.0;
         let graphics_queue = unsafe {

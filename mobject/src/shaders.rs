@@ -86,7 +86,7 @@ pub fn scene_descriptor_pool(
         },
         DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: MAX_FRAMES_IN_FLIGHT
+            descriptor_count: MAX_FRAMES_IN_FLIGHT * 10
         }
     ];
     let pool_info = DescriptorPoolCreateInfo {
