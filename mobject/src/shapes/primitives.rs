@@ -70,6 +70,17 @@ impl Rectangle {
     pub fn include_texture(self, path: String) -> Self {
         Self {
             texture_path: Some(path),
+            vertices: self.vertices
+                .iter()
+                .map(|v|
+                     Vertex2D::with_tex_coord(
+                        v.position,
+                        v.tex_coord
+                    )
+                )
+                .collect::<Vec<Vertex2D>>()
+                .try_into()
+                .unwrap(),
             ..self
         }
     }

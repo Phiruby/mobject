@@ -53,6 +53,13 @@ impl Vertex2D {
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
         }
     }
+    pub fn with_tex_coord(position: Vec3, tex_coord: Vec2) -> Self {
+        Self {
+            position,
+            color: Vec3::new(1.0, 1.0, 1.0),
+            tex_coord
+        }
+    }
     pub fn update_tex_coord(self, c: Vec2) -> Self {
         Self {
             position: self.position,

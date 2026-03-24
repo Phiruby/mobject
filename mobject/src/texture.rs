@@ -251,7 +251,7 @@ pub fn create_ones_texture(
     );
     let data_loc =
         unsafe { device.map_memory(memory, 0, size as u64, MemoryMapFlags::empty()) }.unwrap();
-    let raw_pixels = [1; 100];
+    let raw_pixels = [255; 400];
     unsafe {
         std::ptr::copy_nonoverlapping(raw_pixels.as_ptr(), data_loc as *mut u8, size as usize)
     };
