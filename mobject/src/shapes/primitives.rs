@@ -53,7 +53,7 @@ impl ObjModel {
             .collect();
         let indices = model.indices;
         dbg!(vertices.len(), indices.len());
-        Self ::with_indices(vertices, indices)
+        Self::with_indices(vertices, indices)
     }
 }
 define_shape!(
@@ -66,23 +66,6 @@ define_shape!(
 impl Rectangle {
     pub fn load(vertices: [Vertex2D; 4]) -> Self {
         Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
-    }
-    pub fn include_texture(self, path: String) -> Self {
-        Self {
-            texture_path: Some(path),
-            vertices: self.vertices
-                .iter()
-                .map(|v|
-                     Vertex2D::with_tex_coord(
-                        v.position,
-                        v.tex_coord
-                    )
-                )
-                .collect::<Vec<Vertex2D>>()
-                .try_into()
-                .unwrap(),
-            ..self
-        }
     }
 }
 

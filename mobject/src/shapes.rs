@@ -120,6 +120,7 @@ pub trait BuiltShape {
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
     fn get_ubo_contents(&self) -> &UBO;
+    fn texture_path(&self) -> Option<&str>;
 }
 
 pub trait Shape {

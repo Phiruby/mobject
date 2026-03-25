@@ -65,6 +65,24 @@ macro_rules! define_shape {
                     UBO { model: glm::identity() },
                 )
             }
+
+            pub fn include_texture(self, texture_path: &str) -> Self {
+                Self {
+                    texture_path: Some(String::from(texture_path)),
+                    vertices: self.vertices
+                    .iter()
+                    .map(|v|
+                        Vertex2D::with_tex_coord(
+                            v.position,
+                            v.tex_coord
+                        )
+                    )
+                    .collect::<Vec<Vertex2D>>()
+                    .try_into()
+                    .unwrap(),
+                    ..self
+                }
+            }
         }
 
         impl Shape for $name {
@@ -122,6 +140,9 @@ macro_rules! define_shape {
 
             fn get_ubo_contents(&self) -> &UBO {
                 &self.ubo
+            }
+            fn texture_path(&self) -> Option<&str> {
+                self.texture_path.as_deref()
             }
         }
     };

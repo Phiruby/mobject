@@ -33,8 +33,9 @@ enum SceneState {
     Moving
 }
 
-struct Texture {
+pub struct Texture {
     view: ImageView,
+    pub idx: u32,
     image: Image,
     memory: DeviceMemory
 }
@@ -288,7 +289,8 @@ impl Scene {
             let texture_image_view =
             texture::create_texture_image_view(&self.device, image, mip_levels);
             self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
-            self.textures.insert(pt.to_string(), Texture { view: texture_image_view, image, memory });
+            let idx = self.textures.len() as u32;
+            self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
         }
         self.actions.push(Action::AddMobject(mobject));
     }
@@ -304,7 +306,8 @@ impl Scene {
         let (image, memory, mip_levels) = texture::create_ones_texture(&self.device, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
         let image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
         self.add_texture_to_scene(image, memory, mip_levels, image_view);
-        self.textures.insert(String::from("blank"), Texture { view: image_view, image, memory });
+        let idx = self.textures.len() as u32;
+        self.textures.insert(String::from("blank"), Texture { view: image_view, idx, image, memory });
     }
 
     fn take_action(&mut self) {
@@ -425,7 +428,7 @@ impl Scene {
             .collect();
 
         self.primitive_pipeline.draw_frame(
-            &self.device, command_buffer, current_frame, self.scene_descriptor_sets[current_frame], &self.mobjects, &mobj_desc_sets);
+            &self.device, command_buffer, current_frame, self.scene_descriptor_sets[current_frame], &self.mobjects, &mobj_desc_sets, &self.textures);
 
         let semaphores = vec![sync.image_available];
         let wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];

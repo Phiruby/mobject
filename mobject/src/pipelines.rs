@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::ffi::{CString, c_void};
 use std::mem::offset_of;
 use std::ptr::copy_nonoverlapping;
 
-use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, MemoryMapFlags, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, MemoryMapFlags, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
+use crate::scene::Texture;
 use crate::shapes::{BuiltShape, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 /// This specifies the kind of pipeline the mobject needs to be rendered
@@ -44,6 +46,7 @@ struct CompletePipeline<'a> {
     vertex_attribute_description: [VertexInputAttributeDescription; MAX_FRAMES_IN_FLIGHT as usize],
     topology: PrimitiveTopology,
     render_pass: RenderPass,
+    push_constant: Option<PushConstantRange>
 }
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
@@ -68,7 +71,8 @@ fn bind_mobject_descriptor_sets(
     cmd_buffer: CommandBuffer,
     pipeline_layout: PipelineLayout,
     mobjects: &[Box<dyn BuiltShape>],
-    mobject_descriptor_sets: &[DescriptorSet]
+    mobject_descriptor_sets: &[DescriptorSet],
+    texture_indices: &HashMap<String, Texture>
 ) {
     assert_eq!(mobjects.len(), mobject_descriptor_sets.len());
     let mut cummulative_indices = 0;
@@ -76,6 +80,12 @@ fn bind_mobject_descriptor_sets(
     .iter()
     .zip(mobjects)
     .for_each(|(&descriptor_set, mobj)| {
+        let pt = String::from(mobj.texture_path().unwrap_or("blank"));
+        let texture_index = texture_indices.get(&pt).unwrap().idx as u32;
+        let texture_index = texture_index.to_be_bytes();
+        unsafe {
+            device.cmd_push_constants(cmd_buffer, pipeline_layout, ShaderStageFlags::FRAGMENT, 0, &texture_index);
+        }
         unsafe {
             device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, pipeline_layout, 1, &[descriptor_set], &[])
         };
@@ -220,12 +230,16 @@ fn create_graphics_pipeline(
         scene_descriptor_set_layout,
         mobject_descriptor_set_layout
     ];
-    let pipeline_layout_info = PipelineLayoutCreateInfo {
+    let mut pipeline_layout_info = PipelineLayoutCreateInfo {
         s_type: StructureType::PIPELINE_LAYOUT_CREATE_INFO,
         set_layout_count: descriptor_set_layouts.len() as u32,
         p_set_layouts: descriptor_set_layouts.as_ptr(),
         ..Default::default()
     };
+    if let Some(pcr) = pipeline_info.push_constant {
+        pipeline_layout_info.push_constant_range_count = 1;
+        pipeline_layout_info.p_push_constant_ranges = &pcr;
+    }
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }.unwrap();
 
@@ -326,6 +340,14 @@ impl PrimitivePipeline {
             vertex_attribute_description: Self::vertex_attribute_description(),
             topology: PrimitiveTopology::TRIANGLE_LIST,
             render_pass,
+            // use to index texture element
+            push_constant: Some(
+                PushConstantRange {
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    offset: 0,
+                    size: 4
+                }
+            )
         };
         let (pipeline, layout) = create_graphics_pipeline(
             logical_device,
@@ -407,7 +429,8 @@ impl PrimitivePipeline {
         scene_descriptor_set: DescriptorSet,
         // TODO: annotate with primitive trait as well
         mobjects: &[Box<dyn BuiltShape>],
-        mobject_descriptor_sets: &[DescriptorSet]
+        mobject_descriptor_sets: &[DescriptorSet],
+        texture_indices: &HashMap<String, Texture>
     ) {
         let cmd_begin_info = CommandBufferBeginInfo {
             s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
@@ -459,7 +482,7 @@ impl PrimitivePipeline {
             device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline_layout, 0, &[scene_descriptor_set], &[])
         };
 
-        bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets);
+        bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets, texture_indices);
 
         unsafe { device.cmd_end_render_pass(cmd_buffer) };
         unsafe { device.end_command_buffer(cmd_buffer)}.unwrap();
