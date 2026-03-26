@@ -197,8 +197,8 @@ impl Scene {
 
         let primitive_pipeline = pipelines::PrimitivePipeline::new(
             &logical_device,
-            100,
-            100,
+            100000,
+            100000,
             render_pass,
             framebuffers.try_into().unwrap(),
             scene_descriptor_set_layout,
