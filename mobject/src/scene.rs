@@ -282,7 +282,7 @@ impl Scene {
     pub fn add(&mut self, mobject: Box<dyn Shape>) {
         let texture_path = mobject.texture_path();
         if let Some(pt) = texture_path {
-
+            // TODO: shouldn't return; need to push to actions
             if self.textures.contains_key(pt) { return ;}
 
             let (image, memory, mip_levels) = texture::create_texture_image(&self.device, pt, self.physical_device_properties, self.cmd_pool, self.graphics_queue);

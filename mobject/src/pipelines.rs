@@ -6,7 +6,7 @@ use std::ptr::copy_nonoverlapping;
 use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, MemoryMapFlags, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::Texture;
-use crate::shapes::{BuiltShape, Vertex2D};
+use crate::shapes::{BuiltShape, Vertex2D, UBO};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
@@ -82,7 +82,7 @@ fn bind_mobject_descriptor_sets(
     .for_each(|(&descriptor_set, mobj)| {
         let pt = String::from(mobj.texture_path().unwrap_or("blank"));
         let texture_index = texture_indices.get(&pt).unwrap().idx as u32;
-        let texture_index = texture_index.to_be_bytes();
+        let texture_index = texture_index.to_ne_bytes();
         unsafe {
             device.cmd_push_constants(cmd_buffer, pipeline_layout, ShaderStageFlags::FRAGMENT, 0, &texture_index);
         }
@@ -304,7 +304,7 @@ impl PrimitivePipeline {
         let (index_buffers, index_buffer_memories) = buffers::create_index_buffers(logical_device, nindices, physical_device_memory_properties);
 
         // TODO: unhardcode 10; use structure size
-        let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, 10);
+        let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, std::mem::size_of::<UBO>() as u64);
         let mobject_descriptor_set_layout = shaders::create_description_set_layout(
             logical_device,
             [
@@ -496,8 +496,9 @@ impl PrimitivePipeline {
         mobjects
             .iter()
             .for_each(|mobj| {
+                let (_, _, mapped) = mobj.get_uniform_buffer();
                 window::fill_uniform_buffer(
-                    self.uniform_buffer_mapped_memories[frame_index],
+                    mapped[frame_index],
                     mobj.get_ubo_contents()
                 );
             });

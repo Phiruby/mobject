@@ -12,7 +12,7 @@ fn main() {
     let mut scene = Scene::new();
     scene.add(texture_less);
     scene.wait(5);
-    // scene.add(texture_less);
+    scene.add(shape);
     scene.wait(3);
     scene.main_loop();
     // scene.add(bezier_points);
