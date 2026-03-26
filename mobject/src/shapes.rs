@@ -15,6 +15,7 @@ use nalgebra_glm::{Vec2, Vec3};
 use std::ops::Deref;
 use std::{mem::offset_of, os::raw::c_void};
 use crate::pipelines::Pipelines;
+use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
 
 #[repr(C)]
@@ -133,7 +134,7 @@ pub trait Shape {
 }
 
 pub fn mobjects_to_vertices_and_indices(
-    mobjects: &[&Box<dyn BuiltShape>],
+    mobjects: &[&Mobject],
 ) -> (Vec<Vertex2D>, Vec<u32>) {
     let mut vertices: Vec<Vertex2D> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();

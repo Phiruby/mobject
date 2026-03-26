@@ -7,11 +7,18 @@ fn main() {
     let texture_less = Box::new(Triangle::default());
     let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
     let mut scene = Scene::new();
+
+    let points = Box::new(
+        Points::default()
+        .include_texture("textures/basic.jpg")
+    );
+
     scene.add(texture_less);
     scene.wait(5);
     scene.add(shape);
     scene.wait(3);
     scene.add(obj);
+    scene.add(points);
     scene.wait(3);
     scene.main_loop();
 }

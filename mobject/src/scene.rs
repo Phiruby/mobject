@@ -1,15 +1,17 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, CommandBuffer, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, MemoryPropertyFlags, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, RenderPass, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, MemoryPropertyFlags, Offset2D, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
+use image::Frame;
 use crate::c_utils::Utf8Pointer;
 use crate::device::QueueFamilies;
-use crate::pipelines::{Pipelines, PrimitivePipeline};
+use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::collections::HashMap;
 use std::ffi::{CString, c_void};
+use std::ops::Deref;
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::MAX_FRAMES_IN_FLIGHT;
@@ -40,9 +42,20 @@ pub struct Texture {
     memory: DeviceMemory
 }
 
+pub struct Mobject {
+    mobject: Box<dyn BuiltShape>,
+    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]
+}
+impl Deref for Mobject {
+    type Target = Box<dyn BuiltShape>;
+    fn deref(&self) -> &Self::Target {
+        &self.mobject
+    }
+}
+
 pub struct Scene {
     state: SceneState,
-    mobjects: Vec<Box<dyn BuiltShape>>,
+    // mobjects: Vec<Box<dyn BuiltShape>>,
     actions: Vec<Action>,
     sync: Vec<window::Sync>,
     device: Device,
@@ -51,14 +64,13 @@ pub struct Scene {
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
-    _image: Image,
-    _image_memory: DeviceMemory,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
     depth_image: Image,
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
-    mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
+    // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
+    mobjects: Vec<Mobject>,
     extent: Extent2D,
     textures: HashMap<String, Texture>,
     texture_sampler: Sampler,
@@ -66,8 +78,10 @@ pub struct Scene {
     global_ubo: GlobalUBO,
     physical_device_properties: PhysicalDeviceMemoryProperties,
     primitive_pipeline: PrimitivePipeline,
+    bezier_pipeline: BezierPipeline,
     graphics_queue: Queue,
-    cmd_pool: CommandPool
+    cmd_pool: CommandPool,
+    framebuffers: Vec<Framebuffer>
 }
 
 impl Scene {
@@ -120,16 +134,7 @@ impl Scene {
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let graphics_queue =
             unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
-        let (image, image_memory, mip_levels) = texture::create_texture_image(
-            &logical_device,
-            "textures/viking_room.png",
-            physical_device_memory_properties,
-            pool,
-            graphics_queue,
-        );
-        let texture_image_view =
-            texture::create_texture_image_view(&logical_device, image, mip_levels);
-        let sampler = texture::create_sampler(&logical_device, &instance, physical_device);
+
         let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 &logical_device,
@@ -200,13 +205,23 @@ impl Scene {
             100000,
             100000,
             render_pass,
-            framebuffers.try_into().unwrap(),
+            framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(),
             scene_descriptor_set_layout,
             extent,
             physical_device_memory_properties
         );
 
-        let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
+        let bezier_pipeline = pipelines::BezierPipeline::new(
+            &logical_device,
+            10000,
+            10000,
+            render_pass,
+            framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(), scene_descriptor_set_layout,
+            extent,
+            physical_device_memory_properties
+        );
+
+        // let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
 
         let camera_position = glm::vec3(2.0, 2.0, 2.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
@@ -223,14 +238,11 @@ impl Scene {
             command_buffer,
             swapchain,
             render_pass,
-            _image: image,
-            _image_memory: image_memory,
             depth_image,
             depth_image_view,
             depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
-            mobject_descriptor_sets,
             extent,
             textures: HashMap::new(),
             texture_sampler,
@@ -249,8 +261,10 @@ impl Scene {
             },
             physical_device_properties: physical_device_memory_properties,
             primitive_pipeline,
+            bezier_pipeline,
             graphics_queue,
-            cmd_pool: pool
+            cmd_pool: pool,
+            framebuffers
         }
     }
 
@@ -316,10 +330,10 @@ impl Scene {
         let action = self.actions.pop().unwrap();
         match action {
             Action::AddMobject(mobj) => {
-                self.mobjects.push(mobj.build(&self.device, self.physical_device_properties));
-                self.mobject_descriptor_sets.push(
-                    self.make_mobject_descriptor_set(self.mobjects.last().unwrap())
-                );
+                let build_mobject = mobj.build(&self.device, self.physical_device_properties);
+                let mobj_desc_sets = self.make_mobject_descriptor_set(&build_mobject);
+
+                self.mobjects.push(Mobject { mobject: build_mobject, descriptor_sets: mobj_desc_sets });
             },
             Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
         }
@@ -330,7 +344,7 @@ impl Scene {
         let (uniform_buffers, _, _) = mobject.get_uniform_buffer();
         let built_descriptor_sets = match pipeline {
             Pipelines::Primitive => self.primitive_pipeline.create_mobject_descriptor_sets(&self.device, uniform_buffers),
-            Pipelines::Curved => panic!("Curved pipeline not ready yet")
+            Pipelines::Bezier => self.bezier_pipeline.create_mobject_descriptor_sets(&self.device, uniform_buffers)
         };
         built_descriptor_sets
     }
@@ -364,8 +378,8 @@ impl Scene {
         }
     }
 
-    fn group_mobjects(mobjects: &[Box<dyn BuiltShape>]) -> HashMap<Pipelines, Vec<&Box<dyn BuiltShape>>> {
-        let mut map: HashMap<Pipelines, Vec<&Box<dyn BuiltShape>>> = HashMap::new();
+    fn group_mobjects(mobjects: &[Mobject]) -> HashMap<Pipelines, Vec<&Mobject>> {
+        let mut map: HashMap<Pipelines, Vec<&Mobject>> = HashMap::new();
         mobjects
             .iter()
             .for_each(|mobj| {
@@ -377,11 +391,11 @@ impl Scene {
         map
     }
 
-    fn draw_mobjects(&self, current_frame: usize, pipeline: Pipelines, mobjects: &[&Box<dyn BuiltShape>]) {
+    fn draw_mobjects(&self, current_frame: usize, pipeline: Pipelines, mobjects: &[&Mobject]) {
         let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(mobjects);
         match pipeline {
             Pipelines::Primitive => self.primitive_pipeline.fill_buffers(current_frame, &self.device, &vertices, &indices, mobjects),
-            _ => panic!("The desired pipeline not implemented yet!")
+            Pipelines::Bezier => self.bezier_pipeline.fill_buffers(current_frame, &self.device, &vertices, &indices, mobjects),
         };
     }
 
@@ -422,13 +436,68 @@ impl Scene {
                 .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
         }
         .unwrap();
-        let mobj_desc_sets: Vec<DescriptorSet> = self.mobject_descriptor_sets
-            .iter()
-            .map(|x| x[current_frame])
-            .collect();
 
-        self.primitive_pipeline.draw_frame(
-            &self.device, command_buffer, current_frame, self.scene_descriptor_sets[current_frame], &self.mobjects, &mobj_desc_sets, &self.textures);
+        let cmd_begin_info = CommandBufferBeginInfo {
+            s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
+            ..Default::default()
+        };
+        unsafe { self.device.begin_command_buffer(command_buffer, &cmd_begin_info) }.unwrap();
+        let clear_colors = [
+            ClearValue {
+                color: ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0]
+                },
+            },
+            ClearValue {
+                depth_stencil: ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0
+                }
+            }
+        ];
+        let render_pass_begin_info = RenderPassBeginInfo {
+            s_type: StructureType::RENDER_PASS_BEGIN_INFO,
+            render_pass: self.render_pass,
+            framebuffer: self.framebuffers[current_frame],
+            render_area: Rect2D { offset: Offset2D { x: 0, y: 0 }, extent: self.extent },
+            clear_value_count: clear_colors.len() as u32,
+            p_clear_values: clear_colors.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device.cmd_begin_render_pass(command_buffer, &render_pass_begin_info, SubpassContents::INLINE)
+        };
+
+        for (&pipeline_kind, mobjs) in grouped_mobjects.iter() {
+            let mobs: Vec<&Box<dyn BuiltShape>> = mobjs.iter().map(|x| &x.mobject).collect();
+            let desc_sets: Vec<DescriptorSet> = mobjs.iter().map(|x| x.descriptor_sets[current_frame]).collect();
+            match pipeline_kind {
+                Pipelines::Primitive => self.primitive_pipeline.draw_frame(
+                    &self.device,
+                    command_buffer,
+                    current_frame,
+                    self.scene_descriptor_sets[current_frame],
+                    &mobs,
+                    &desc_sets,
+                    &self.textures
+                ),
+
+                Pipelines::Bezier => self.bezier_pipeline.draw_frame(
+                    &self.device,
+                    command_buffer,
+                    current_frame,
+                    self.scene_descriptor_sets[current_frame],
+                    &mobs,
+                    &desc_sets,
+                    &self.textures
+                )
+            };
+        }
+        unsafe { self.device.cmd_end_render_pass(command_buffer) };
+        unsafe { self.device.end_command_buffer(command_buffer)}.unwrap();
+        // self.primitive_pipeline.draw_frame(
+        //     &self.device, command_buffer, current_frame, self.scene_descriptor_sets[current_frame], &self.mobjects, &mobj_desc_sets, &self.textures);
 
         let semaphores = vec![sync.image_available];
         let wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];

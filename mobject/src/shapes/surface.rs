@@ -13,7 +13,7 @@ define_shape!(
         vertices: Vec<Vertex2D>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Bezier
 );
 
 impl Default for Points {
