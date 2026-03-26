@@ -3,13 +3,11 @@ use ash::{
     Device, Instance,
     khr::surface,
     vk::{
-        self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceFeatures,
-        PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType,
-        SurfaceKHR,
+        self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceDescriptorIndexingFeatures, PhysicalDeviceFeatures, PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType, SurfaceKHR
     },
 };
 use dialoguer::FuzzySelect;
-use std::{ffi::CStr, fmt::Debug};
+use std::{ffi::CStr, fmt::Debug, os::raw::c_void};
 
 pub fn select_physical_device(instance: &Instance) -> PhysicalDevice {
     let physical_devices = unsafe { instance.enumerate_physical_devices() }.unwrap();
@@ -38,6 +36,32 @@ pub fn select_physical_device(instance: &Instance) -> PhysicalDevice {
         .interact()
         .unwrap();
     physical_devices[chosen_device]
+}
+
+
+fn enable_descriptor_indexing<'a, 'b>(device: PhysicalDevice, instance: &'a Instance) -> (Box<PhysicalDeviceFeatures2<'b>>, Box<PhysicalDeviceDescriptorIndexingFeatures>) {
+    let mut descriptor_indexing_features = Box::new(PhysicalDeviceDescriptorIndexingFeatures {
+        s_type: StructureType::PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+        p_next: std::ptr::null_mut(),
+        ..Default::default()
+    });
+
+    let mut physical_device_features = Box::new(PhysicalDeviceFeatures2 {
+        s_type: StructureType::PHYSICAL_DEVICE_FEATURES_2,
+        p_next: descriptor_indexing_features.as_mut() as *mut _ as *mut c_void,
+        ..Default::default()
+    });
+    unsafe {
+        instance.get_physical_device_features2(device, &mut physical_device_features);
+    };
+    assert_eq!(descriptor_indexing_features.shader_sampled_image_array_non_uniform_indexing, vk::TRUE);
+    assert_eq!(descriptor_indexing_features.descriptor_binding_sampled_image_update_after_bind, vk::TRUE);
+    assert_eq!(descriptor_indexing_features.shader_uniform_buffer_array_non_uniform_indexing, vk::TRUE);
+    assert_eq!(descriptor_indexing_features.descriptor_binding_uniform_buffer_update_after_bind, vk::TRUE);
+    // NOTE: unused right now
+    assert_eq!(descriptor_indexing_features.shader_storage_buffer_array_non_uniform_indexing, vk::TRUE);
+    assert_eq!(descriptor_indexing_features.descriptor_binding_storage_buffer_update_after_bind, vk::TRUE);
+    (physical_device_features, descriptor_indexing_features)
 }
 
 pub struct QueueFamilies {
@@ -125,14 +149,10 @@ pub fn create_logical_device<S: AsRef<str> + Debug>(
     queues: &QueueFamilies,
     instance: &Instance,
     device: PhysicalDevice,
-    physical_device_features: Option<PhysicalDeviceFeatures>,
     extension_names: Option<Vec<S>>,
 ) -> Device {
-    let device_features = match physical_device_features {
-        Some(x) => x,
-        _ => PhysicalDeviceFeatures::default(),
-    };
-
+    // need to maintain both vars since they are used during creation of device
+    let (indexing_features, _descriptor_index_features) = enable_descriptor_indexing(device, instance);
     let device_extensions = match extension_names {
         Some(x) => x,
         _ => Vec::new(),
@@ -153,11 +173,13 @@ pub fn create_logical_device<S: AsRef<str> + Debug>(
         queue_create_info_count: queue_create_infos.len() as u32,
         pp_enabled_extension_names: device_extension_ptrs.as_ptr(),
         enabled_extension_count: device_extensions.len() as u32,
-        p_enabled_features: &device_features,
+        p_next: indexing_features.as_ref() as *const _ as *const c_void,
         ..Default::default()
     };
 
     unsafe { instance.create_device(device, &device_create_info, None) }.unwrap()
+    // dbg!("SEG DONE");
+    // d
 }
 
 #[cfg(test)]

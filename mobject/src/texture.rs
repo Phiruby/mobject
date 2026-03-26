@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+
 use crate::buffers;
 use crate::swapchain;
 use ash::vk::ImageBlit;
@@ -227,16 +229,66 @@ pub fn create_texture_image(
         height,
         mip_levels,
     );
-    // transition_image_layout(
-    //     device,
-    //     pool,
-    //     image,
-    //     mip_levels,
-    //     Format::R8G8B8A8_SRGB,
-    //     ImageLayout::TRANSFER_DST_OPTIMAL,
-    //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //     graphics_queue,
-    // );
+    unsafe { device.destroy_buffer(buffer, None) };
+    unsafe { device.free_memory(memory, None) };
+    (image, image_memory, mip_levels)
+}
+
+pub fn create_ones_texture(
+    device: &Device,
+    physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+    pool: CommandPool,
+    graphics_queue: Queue,
+) -> (Image, DeviceMemory, u32) {
+    // can be arbitrary since its all ones anyways
+    let mip_levels = (10 as u32).ilog2() + 1;
+    let size = 10 * 10 * 4; // 4 channels; one byte each
+    let (buffer, memory) = buffers::create_buffer(
+        device,
+        size as u64,
+        BufferUsageFlags::TRANSFER_SRC,
+        physical_device_memory_properties,
+    );
+    let data_loc =
+        unsafe { device.map_memory(memory, 0, size as u64, MemoryMapFlags::empty()) }.unwrap();
+    let raw_pixels = [255; 400];
+    unsafe {
+        std::ptr::copy_nonoverlapping(raw_pixels.as_ptr(), data_loc as *mut u8, size as usize)
+    };
+    unsafe { device.unmap_memory(memory) };
+    let (image, image_memory) = create_image(
+        device,
+        10,
+        10,
+        mip_levels,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::ImageTiling::OPTIMAL,
+        ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::TRANSFER_SRC
+            | vk::ImageUsageFlags::SAMPLED,
+        MemoryPropertyFlags::DEVICE_LOCAL,
+        physical_device_memory_properties,
+    );
+    transition_image_layout(
+        device,
+        pool,
+        image,
+        mip_levels,
+        Format::R8G8B8A8_SRGB,
+        ImageLayout::UNDEFINED,
+        ImageLayout::TRANSFER_DST_OPTIMAL,
+        graphics_queue,
+    );
+    copy_buffer_to_image(device, pool, buffer, image, 10, 10, graphics_queue);
+    generate_mipmaps(
+        pool,
+        device,
+        image,
+        graphics_queue,
+        10,
+        10,
+        mip_levels,
+    );
     unsafe { device.destroy_buffer(buffer, None) };
     unsafe { device.free_memory(memory, None) };
     (image, image_memory, mip_levels)

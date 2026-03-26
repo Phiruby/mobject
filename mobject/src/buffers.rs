@@ -102,114 +102,21 @@ pub fn end_single_time_recording(
     unsafe { device.free_command_buffers(pool, &[buffer]) };
 }
 
-pub fn record_command_buffer(
-    device: &Device,
-    buffer: CommandBuffer,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer,
-    image_index: u32,
-    render_pass: RenderPass,
-    framebuffers: &[Framebuffer],
-    scene_descriptor_set: DescriptorSet,
-    mobject_descriptor_sets: Vec<DescriptorSet>,
-    mobjects: &[Box<dyn BuiltShape>],
-    extent: Extent2D,
-    pipeline_layout: PipelineLayout,
-    graphics_pipeline: Pipeline,
-) {
-    let command_begin_info = CommandBufferBeginInfo {
-        s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
-        ..Default::default()
-    };
-    unsafe { device.begin_command_buffer(buffer, &command_begin_info) }.unwrap();
-    let clear_colors = [
-        ClearValue {
-            color: ClearColorValue {
-                float32: [0.0, 0.0, 0.0, 0.0],
-            },
-        },
-        ClearValue {
-            depth_stencil: ClearDepthStencilValue {
-                depth: 1.0,
-                stencil: 0,
-            },
-        },
-    ];
-    let render_pass_begin_info = RenderPassBeginInfo {
-        s_type: StructureType::RENDER_PASS_BEGIN_INFO,
-        render_pass,
-        framebuffer: framebuffers[image_index as usize],
-        render_area: Rect2D {
-            offset: Offset2D { x: 0, y: 0 },
-            extent,
-        },
-        clear_value_count: clear_colors.len() as u32,
-        p_clear_values: clear_colors.as_ptr(),
-        ..Default::default()
-    };
-    unsafe {
-        device.cmd_begin_render_pass(buffer, &render_pass_begin_info, SubpassContents::INLINE)
-    };
-
-    unsafe { device.cmd_bind_pipeline(buffer, vk::PipelineBindPoint::GRAPHICS, graphics_pipeline) };
-
-    unsafe {
-        device.cmd_bind_vertex_buffers(buffer, 0, &[vertex_buffer], &[0]);
-    }
-    unsafe { device.cmd_bind_index_buffer(buffer, index_buffer, 0, vk::IndexType::UINT32) };
-    unsafe {
-        device.cmd_bind_descriptor_sets(
-            buffer,
-            PipelineBindPoint::GRAPHICS,
-            pipeline_layout,
-            0,
-            &[scene_descriptor_set],
-            &[],
-        )
-    };
-    let mut cummulative_indices = 0;
-
-    mobject_descriptor_sets
-        .iter()
-        .zip(mobjects.iter())
-        .for_each(|(&desc_set, mobj)| {
-            let num_indices = mobj.indices().len() as u32;
-            unsafe {
-                device.cmd_bind_descriptor_sets(
-                    buffer,
-                    PipelineBindPoint::GRAPHICS,
-                    pipeline_layout,
-                    1,
-                    &[desc_set],
-                    &[],
-                );
-            };
-            unsafe { device.cmd_draw_indexed(buffer, num_indices, 1, cummulative_indices, 0, 0) };
-            cummulative_indices += num_indices;
-        });
-
-    unsafe { device.cmd_end_render_pass(buffer) };
-    // end recording command buffer: not necassarily finishing the execution
-    unsafe { device.end_command_buffer(buffer) }.unwrap();
-}
-
 pub fn create_vertex_buffers(
     device: &Device,
     num_vertices_upper_bound: usize,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>) {
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
+) -> ([Buffer; MAX_FRAMES_IN_FLIGHT as usize], [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]) {
+    let entities: [(Buffer, DeviceMemory); MAX_FRAMES_IN_FLIGHT as usize] = array::from_fn(|_| {
             create_buffer(
                 device,
                 (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
                 BufferUsageFlags::VERTEX_BUFFER,
                 memory_proprties,
             )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+        });
+    let buffers = array::from_fn(|i| entities[i].0);
+    let memories = array::from_fn(|i| entities[i].1);
     (buffers, memories)
 }
 
@@ -217,19 +124,18 @@ pub fn create_index_buffers(
     device: &Device,
     num_indices_upper_bound: usize,
     memory_proprties: PhysicalDeviceMemoryProperties,
-) -> (Vec<Buffer>, Vec<DeviceMemory>) {
-    let entities: Vec<(Buffer, DeviceMemory)> = (0..MAX_FRAMES_IN_FLIGHT)
-        .map(|_| {
+) -> ([Buffer; MAX_FRAMES_IN_FLIGHT as usize], [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]) {
+    let entities: [(Buffer, DeviceMemory); MAX_FRAMES_IN_FLIGHT as usize] = array::from_fn(|_| {
             create_buffer(
                 device,
                 (size_of::<u32>() * num_indices_upper_bound) as u64,
                 BufferUsageFlags::INDEX_BUFFER,
                 memory_proprties,
             )
-        })
-        .collect();
-    let buffers = entities.iter().map(|(buffer, _)| *buffer).collect();
-    let memories = entities.iter().map(|(_, memory)| *memory).collect();
+        });
+
+    let buffers = array::from_fn(|i| entities[i].0);
+    let memories = array::from_fn(|i| entities[i].1);
     (buffers, memories)
 }
 
