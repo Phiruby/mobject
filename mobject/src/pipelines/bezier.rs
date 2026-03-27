@@ -171,7 +171,7 @@ impl BezierPipeline {
         // TODO: annotate with primitive trait as well
         mobjects: &[&Box<dyn BuiltShape>],
         mobject_descriptor_sets: &[DescriptorSet],
-        texture_indices: &HashMap<String, Texture>
+        texture_indices: &HashMap<String, Texture>,
     ) {
         unsafe {
             device.cmd_bind_pipeline(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline)
@@ -204,7 +204,7 @@ impl BezierPipeline {
                 let (_, _, mapped) = mobj.get_uniform_buffer();
                 window::fill_uniform_buffer(
                     mapped[frame_index],
-                    mobj.get_ubo_contents()
+                    &mobj.get_ubo_contents()
                 );
             });
     }

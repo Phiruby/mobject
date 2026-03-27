@@ -2,7 +2,7 @@ use ash::vk::{Buffer, DeviceMemory};
 use ash::Device;
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::buffers;
-use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D};
+use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D, ShapeConstruction, ShapeMotion};
 use nalgebra_glm as glm;
 use crate::pipelines::Pipelines;
 #[macro_export]
@@ -111,7 +111,7 @@ macro_rules! define_shape {
             }
         }
 
-        impl BuiltShape for $name {
+        impl crate::shapes::ShapeConstruction for $name {
             fn get_vertices(&self) -> &[Vertex2D] {
                 &self.vertices
             }
@@ -137,13 +137,52 @@ macro_rules! define_shape {
                     self.uniform_mapped_memories.as_ref().unwrap(),
                 )
             }
-
-            fn get_ubo_contents(&self) -> &UBO {
-                &self.ubo
-            }
             fn texture_path(&self) -> Option<&str> {
                 self.texture_path.as_deref()
             }
         }
+        impl crate::shapes::ShapeMotion for $name {
+            fn update(&mut self) {
+
+            }
+            fn get_ubo_contents(&self) -> &UBO {
+                &self.ubo
+            }
+        }
+        impl BuiltShape for $name {}
+    };
+}
+
+#[macro_export]
+macro_rules! motion_shape_construction {
+    ($t:ty) => {
+        impl crate::shapes::ShapeConstruction for $t {
+            fn get_pipeline(&self) -> crate::shapes::Pipelines {
+                self.mobject.get_pipeline()
+            }
+
+            fn get_vertices(&self) -> &[crate::shapes::Vertex2D] {
+                self.mobject.get_vertices()
+            }
+
+            fn indices(&self) -> &[u32] {
+                self.mobject.indices()
+            }
+
+            fn get_uniform_buffer(
+                &self,
+            ) -> (
+                &[ash::vk::Buffer; crate::MAX_FRAMES_IN_FLIGHT as usize],
+                &[ash::vk::DeviceMemory; crate::MAX_FRAMES_IN_FLIGHT as usize],
+                &[*mut std::ffi::c_void; crate::MAX_FRAMES_IN_FLIGHT as usize],
+            ) {
+                self.mobject.get_uniform_buffer()
+            }
+
+            fn texture_path(&self) -> Option<&str> {
+                self.mobject.texture_path()
+            }
+        }
+        impl BuiltShape for $t {}
     };
 }

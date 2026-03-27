@@ -11,7 +11,7 @@ use nalgebra_glm as glm;
 use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
 use std::collections::HashMap;
 use std::ffi::{CString, c_void};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::MAX_FRAMES_IN_FLIGHT;
@@ -45,6 +45,11 @@ pub struct Texture {
 pub struct Mobject {
     mobject: Box<dyn BuiltShape>,
     descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]
+}
+impl DerefMut for Mobject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.mobject
+    }
 }
 impl Deref for Mobject {
     type Target = Box<dyn BuiltShape>;
@@ -410,6 +415,13 @@ impl Scene {
         }
         .unwrap();
         unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
+
+        // update mobjects: any time dependencies (e.g rotations) change here
+        self.mobjects
+            .iter_mut()
+            .for_each(|x| x.update());
+
+
         // TODO: move out of this struct
         let grouped_mobjects = Scene::group_mobjects(&self.mobjects);
 
