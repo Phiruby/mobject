@@ -1,5 +1,5 @@
 #version 450
-layout (vertices=3) out;
+layout (vertices=9) out;
 layout (location = 0) in vec3 fragColor[];
 layout (location = 1) in vec2 texCoord[];
 
@@ -12,7 +12,7 @@ in gl_PerVertex
     float gl_PointSize;
     float gl_ClipDistance[];
     float gl_CullDistance[];
-} gl_in[gl_MaxPatchVertices];
+} gl_in[];
 
 void main() {
   gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
@@ -21,10 +21,12 @@ void main() {
 
   if (gl_InvocationID == 0) {
       // https://docs.vulkan.org/spec/latest/chapters/tessellation.html#tessellation-triangle-tessellation
-      gl_TessLevelInner[0] = 1.0;
+      gl_TessLevelInner[0] = 16.0;
+      gl_TessLevelInner[1] = 16.0;
       // controls outer subdivisions
-      gl_TessLevelOuter[0] = 1.0;
-      gl_TessLevelOuter[1] = 1.0;
-      gl_TessLevelOuter[2] = 1.0;
+      gl_TessLevelOuter[0] = 16.0;
+      gl_TessLevelOuter[1] = 16.0;
+      gl_TessLevelOuter[2] = 16.0;
+      gl_TessLevelOuter[3] = 16.0;
     }
 }
