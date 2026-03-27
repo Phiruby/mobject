@@ -17,7 +17,15 @@ fn main() {
         0.001,
         glm::make_vec3(&[0.0, 0.0, 1.0]), obj);
 
+    let rotating_pts = Rotate::new(
+        0.005,
+        glm::make_vec3(&[0.0, 0.0, 1.0]),
+        points
+    );
+
     scene.add(rotating_obj);
     scene.wait(10);
+    scene.add(rotating_pts);
+    scene.wait(3);
     scene.main_loop();
 }

@@ -204,7 +204,7 @@ impl BezierPipeline {
                 let (_, _, mapped) = mobj.get_uniform_buffer();
                 window::fill_uniform_buffer(
                     mapped[frame_index],
-                    &mobj.get_ubo_contents()
+                    mobj.get_ubo_contents()
                 );
             });
     }
