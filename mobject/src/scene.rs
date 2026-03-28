@@ -7,7 +7,7 @@ use crate::device::QueueFamilies;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
-use crate::shapes::{Animation, BuiltShape, GlobalUBO, Shape, UBO};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape, UBO};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CString, c_void};
 use std::ops::{Deref, DerefMut};
@@ -19,10 +19,30 @@ use crate::MAX_FRAMES_IN_FLIGHT;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 2] = ["VK_KHR_swapchain", "VK_EXT_descriptor_indexing"];
 
+
+struct Anim {
+    anim: Box<dyn Animation>,
+    start_time: Instant
+}
+
+impl Deref for Anim {
+    type Target = Box<dyn Animation>;
+    fn deref(&self) -> &Self::Target {
+        &self.anim
+    }
+}
+
+impl DerefMut for Anim {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.anim
+    }
+}
+
 enum Action {
     AddMobject(MobjectId, Box<dyn Shape>),
     Wait { seconds: u8 },
-    Play(Box<dyn Animation>)
+    Play(Box<dyn Animation>),
+    CameraMove(CameraMotion)
 }
 
 /// Represents the current state of the scene:
@@ -85,7 +105,9 @@ pub struct Scene {
     // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobjects: Vec<Mobject>,
     mobject_index: HashMap<MobjectId, usize>,
-    animations: Vec<Box<dyn Animation>>,
+    animations: Vec<Anim>,
+    camera_motions: VecDeque<CameraAnimation>,
+
     next_id: MobjectId,
     extent: Extent2D,
     textures: HashMap<String, Texture>,
@@ -249,6 +271,7 @@ impl Scene {
             mobjects: Vec::new(),
             mobject_index: HashMap::new(),
             animations: Vec::new(),
+            camera_motions: VecDeque::new(),
             next_id: 0,
             sync,
             device: logical_device,
@@ -312,6 +335,10 @@ impl Scene {
             });
     }
 
+    pub fn camera(&self) -> CameraProxy {
+        CameraProxy { }
+    }
+
     pub fn add(&mut self, mobject: Box<dyn Shape>) -> MobjectId {
         let id = self.next_id;
         self.next_id += 1;
@@ -337,6 +364,10 @@ impl Scene {
 
     pub fn animate(&mut self, id: MobjectId) -> AnimationProxy {
         AnimationProxy { id }
+    }
+
+    pub fn motion(&mut self, camera_motion: CameraMotion) {
+        self.actions.push_back(Action::CameraMove(camera_motion));
     }
 
     pub fn play(&mut self, animation: Box<dyn Animation>) {
@@ -370,7 +401,13 @@ impl Scene {
             Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
 
             Action::Play(anim) => {
-                self.animations.push(anim);
+                self.animations.push(Anim {anim, start_time: Instant::now()});
+            },
+
+            Action::CameraMove(mot) => {
+                self.camera_motions.push_back(
+                    CameraAnimation {anim: mot, start_time: Instant::now(), init_position: self.global_ubo.camera_position}
+                );
             }
         }
     }
@@ -454,11 +491,25 @@ impl Scene {
             let target_id = anim.get_target();
 
             let target = mobjects.get_mut(target_id as usize).unwrap();
+            let dt = anim.start_time.elapsed().as_secs_f32();
 
-            anim.update(0.0, target);
+            anim.update(dt, target);
         }
 
         animations.retain(|a| !a.is_finished());
+
+        // update camera motions (only one camera animation at a time)
+        if let Some(motion) = self.camera_motions.front_mut() {
+            let change = motion.start_time.elapsed().as_secs_f32();
+            let ubo = &mut self.global_ubo;
+            let start_pos = motion.init_position;
+            motion.anim.update(ubo, start_pos, change);
+
+            if motion.anim.is_finished() {
+                self.camera_motions.pop_front();
+            }
+        }
+
         // TODO: move out of this struct
         let grouped_mobjects = Scene::group_mobjects(&self.mobjects);
 

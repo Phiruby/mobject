@@ -154,37 +154,3 @@ macro_rules! define_shape {
         impl BuiltShape for $name {}
     };
 }
-
-#[macro_export]
-macro_rules! motion_shape_construction {
-    ($t:ty) => {
-        impl crate::shapes::ShapeConstruction for $t {
-            fn get_pipeline(&self) -> crate::shapes::Pipelines {
-                self.mobject.get_pipeline()
-            }
-
-            fn get_vertices(&self) -> &[crate::shapes::Vertex2D] {
-                self.mobject.get_vertices()
-            }
-
-            fn indices(&self) -> &[u32] {
-                self.mobject.indices()
-            }
-
-            fn get_uniform_buffer(
-                &self,
-            ) -> (
-                &[ash::vk::Buffer; crate::MAX_FRAMES_IN_FLIGHT as usize],
-                &[ash::vk::DeviceMemory; crate::MAX_FRAMES_IN_FLIGHT as usize],
-                &[*mut std::ffi::c_void; crate::MAX_FRAMES_IN_FLIGHT as usize],
-            ) {
-                self.mobject.get_uniform_buffer()
-            }
-
-            fn texture_path(&self) -> Option<&str> {
-                self.mobject.texture_path()
-            }
-        }
-        impl BuiltShape for $t {}
-    };
-}
