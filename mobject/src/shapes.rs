@@ -1,9 +1,11 @@
 pub mod surface;
 pub mod primitives;
 pub mod generator;
-
+pub mod animations;
 pub use primitives::*;
 pub use generator::*;
+pub use animations::*;
+
 pub use surface::Points;
 use ash::Device;
 use ash::vk::{
@@ -19,7 +21,7 @@ use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UBO {
     pub model: glm::Mat4,
 }
@@ -103,7 +105,12 @@ impl Vertex<3> for Vertex2D {
     }
 }
 
-pub trait BuiltShape {
+pub trait ShapeMotion {
+    fn get_ubo_contents(&self) -> &UBO;
+    fn rotate(&mut self, axis: &glm::Vec3, angle: f32);
+}
+
+pub trait ShapeConstruction {
     fn get_pipeline(&self) -> Pipelines;
     fn vertices2d(&self) -> &[Vertex2D] {
         self.get_vertices()
@@ -120,9 +127,10 @@ pub trait BuiltShape {
         &[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
-    fn get_ubo_contents(&self) -> &UBO;
     fn texture_path(&self) -> Option<&str>;
 }
+
+pub trait BuiltShape: ShapeMotion + ShapeConstruction {}
 
 pub trait Shape {
     fn build(

@@ -2,7 +2,7 @@ use ash::vk::{Buffer, DeviceMemory};
 use ash::Device;
 use crate::MAX_FRAMES_IN_FLIGHT;
 use crate::buffers;
-use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D};
+use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D, ShapeConstruction, ShapeMotion};
 use nalgebra_glm as glm;
 use crate::pipelines::Pipelines;
 #[macro_export]
@@ -111,7 +111,7 @@ macro_rules! define_shape {
             }
         }
 
-        impl BuiltShape for $name {
+        impl crate::shapes::ShapeConstruction for $name {
             fn get_vertices(&self) -> &[Vertex2D] {
                 &self.vertices
             }
@@ -137,13 +137,20 @@ macro_rules! define_shape {
                     self.uniform_mapped_memories.as_ref().unwrap(),
                 )
             }
-
-            fn get_ubo_contents(&self) -> &UBO {
-                &self.ubo
-            }
             fn texture_path(&self) -> Option<&str> {
                 self.texture_path.as_deref()
             }
         }
+        impl crate::shapes::ShapeMotion for $name {
+            fn rotate(&mut self, axis: &glm::Vec3, angle: f32) {
+                let model_matrix = self.ubo.model;
+                let new_model_matrix = glm::rotate(&model_matrix, angle, axis);
+                self.ubo.model = new_model_matrix;
+            }
+            fn get_ubo_contents(&self) -> &UBO {
+                &self.ubo
+            }
+        }
+        impl BuiltShape for $name {}
     };
 }

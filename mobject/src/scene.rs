@@ -2,25 +2,47 @@ use ash::vk::{
     self, ApplicationInfo, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, MemoryPropertyFlags, Offset2D, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
-use image::Frame;
 use crate::c_utils::Utf8Pointer;
 use crate::device::QueueFamilies;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
-use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO};
-use std::collections::HashMap;
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape, UBO};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::{CString, c_void};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
+use crate::shapes::animations::AnimationProxy;
+pub type MobjectId = u32;
 use crate::MAX_FRAMES_IN_FLIGHT;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 2] = ["VK_KHR_swapchain", "VK_EXT_descriptor_indexing"];
 
+
+struct Anim {
+    anim: Box<dyn Animation>,
+    start_time: Instant
+}
+
+impl Deref for Anim {
+    type Target = Box<dyn Animation>;
+    fn deref(&self) -> &Self::Target {
+        &self.anim
+    }
+}
+
+impl DerefMut for Anim {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.anim
+    }
+}
+
 enum Action {
-    AddMobject(Box<dyn Shape>),
-    Wait { seconds: u8 }
+    AddMobject(MobjectId, Box<dyn Shape>),
+    Wait { seconds: u8 },
+    Play(Box<dyn Animation>),
+    CameraMove(CameraMotion)
 }
 
 /// Represents the current state of the scene:
@@ -43,8 +65,20 @@ pub struct Texture {
 }
 
 pub struct Mobject {
+    pub id: MobjectId,
     mobject: Box<dyn BuiltShape>,
-    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]
+    descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
+}
+impl Mobject {
+    pub fn id(&self) -> MobjectId {
+        self.id
+    }
+}
+
+impl DerefMut for Mobject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.mobject
+    }
 }
 impl Deref for Mobject {
     type Target = Box<dyn BuiltShape>;
@@ -55,8 +89,7 @@ impl Deref for Mobject {
 
 pub struct Scene {
     state: SceneState,
-    // mobjects: Vec<Box<dyn BuiltShape>>,
-    actions: Vec<Action>,
+    actions: VecDeque<Action>,
     sync: Vec<window::Sync>,
     device: Device,
     swapchain_device: khr::swapchain::Device,
@@ -71,6 +104,11 @@ pub struct Scene {
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobjects: Vec<Mobject>,
+    mobject_index: HashMap<MobjectId, usize>,
+    animations: Vec<Anim>,
+    camera_motions: VecDeque<CameraAnimation>,
+
+    next_id: MobjectId,
     extent: Extent2D,
     textures: HashMap<String, Texture>,
     texture_sampler: Sampler,
@@ -229,8 +267,12 @@ impl Scene {
         let angle = glm::vec1(45.0);
         Self {
             state: SceneState::Moving,
-            actions: Vec::new(),
+            actions: VecDeque::new(),
             mobjects: Vec::new(),
+            mobject_index: HashMap::new(),
+            animations: Vec::new(),
+            camera_motions: VecDeque::new(),
+            next_id: 0,
             sync,
             device: logical_device,
             swapchain_device,
@@ -293,23 +335,43 @@ impl Scene {
             });
     }
 
-    pub fn add(&mut self, mobject: Box<dyn Shape>) {
+    pub fn camera(&self) -> CameraProxy {
+        CameraProxy { }
+    }
+
+    pub fn add(&mut self, mobject: Box<dyn Shape>) -> MobjectId {
+        let id = self.next_id;
+        self.next_id += 1;
+
         let texture_path = mobject.texture_path();
         if let Some(pt) = texture_path {
-            // TODO: shouldn't return; need to push to actions
-            if self.textures.contains_key(pt) { return ;}
-
-            let (image, memory, mip_levels) = texture::create_texture_image(&self.device, pt, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
-            let texture_image_view =
-            texture::create_texture_image_view(&self.device, image, mip_levels);
-            self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
-            let idx = self.textures.len() as u32;
-            self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
+            if self.textures.contains_key(pt) { }
+            else {
+                let (image, memory, mip_levels) = texture::create_texture_image(&self.device, pt, self.physical_device_properties, self.cmd_pool, self.graphics_queue);
+                let texture_image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
+                self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
+                let idx = self.textures.len() as u32;
+                self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
+            }
         }
-        self.actions.push(Action::AddMobject(mobject));
+
+        self.actions.push_back(Action::AddMobject(id, mobject));
+        id
     }
     pub fn wait(&mut self, seconds: u8) {
-        self.actions.push(Action::Wait { seconds });
+        self.actions.push_back(Action::Wait { seconds });
+    }
+
+    pub fn animate(&mut self, id: MobjectId) -> AnimationProxy {
+        AnimationProxy { id }
+    }
+
+    pub fn motion(&mut self, camera_motion: CameraMotion) {
+        self.actions.push_back(Action::CameraMove(camera_motion));
+    }
+
+    pub fn play(&mut self, animation: Box<dyn Animation>) {
+        self.actions.push_back(Action::Play(animation));
     }
 
     fn set_state(&mut self, state: SceneState) {
@@ -325,17 +387,28 @@ impl Scene {
     }
 
     fn take_action(&mut self) {
-        if self.actions.len() == 0 {return ;}
-        // NOTE: going backwards. doing this for now for simplicity
-        let action = self.actions.pop().unwrap();
+        if self.actions.is_empty() { return; }
+        let action = self.actions.pop_front().unwrap();
         match action {
-            Action::AddMobject(mobj) => {
+            Action::AddMobject(id, mobj) => {
                 let build_mobject = mobj.build(&self.device, self.physical_device_properties);
                 let mobj_desc_sets = self.make_mobject_descriptor_set(&build_mobject);
+                let index = self.mobjects.len();
 
-                self.mobjects.push(Mobject { mobject: build_mobject, descriptor_sets: mobj_desc_sets });
+                self.mobjects.push(Mobject { id, mobject: build_mobject, descriptor_sets: mobj_desc_sets });
+                self.mobject_index.insert(id, index);
             },
             Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
+
+            Action::Play(anim) => {
+                self.animations.push(Anim {anim, start_time: Instant::now()});
+            },
+
+            Action::CameraMove(mot) => {
+                self.camera_motions.push_back(
+                    CameraAnimation {anim: mot, start_time: Instant::now(), init_position: self.global_ubo.camera_position}
+                );
+            }
         }
     }
 
@@ -410,6 +483,33 @@ impl Scene {
         }
         .unwrap();
         unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
+
+        // animations and any object updates will be here
+        let (mobjects, animations) = (&mut self.mobjects, &mut self.animations);
+
+        for anim in animations.iter_mut() {
+            let target_id = anim.get_target();
+
+            let target = mobjects.get_mut(target_id as usize).unwrap();
+            let dt = anim.start_time.elapsed().as_secs_f32();
+
+            anim.update(dt, target);
+        }
+
+        animations.retain(|a| !a.is_finished());
+
+        // update camera motions (only one camera animation at a time)
+        if let Some(motion) = self.camera_motions.front_mut() {
+            let change = motion.start_time.elapsed().as_secs_f32();
+            let ubo = &mut self.global_ubo;
+            let start_pos = motion.init_position;
+            motion.anim.update(ubo, start_pos, change);
+
+            if motion.anim.is_finished() {
+                self.camera_motions.pop_front();
+            }
+        }
+
         // TODO: move out of this struct
         let grouped_mobjects = Scene::group_mobjects(&self.mobjects);
 

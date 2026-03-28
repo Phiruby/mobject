@@ -171,7 +171,7 @@ impl BezierPipeline {
         // TODO: annotate with primitive trait as well
         mobjects: &[&Box<dyn BuiltShape>],
         mobject_descriptor_sets: &[DescriptorSet],
-        texture_indices: &HashMap<String, Texture>
+        texture_indices: &HashMap<String, Texture>,
     ) {
         unsafe {
             device.cmd_bind_pipeline(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline)
