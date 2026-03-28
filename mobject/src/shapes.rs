@@ -1,11 +1,9 @@
 pub mod surface;
 pub mod primitives;
 pub mod generator;
-pub mod motion;
 pub mod animations;
 pub use primitives::*;
 pub use generator::*;
-pub use motion::*;
 pub use animations::*;
 
 pub use surface::Points;
