@@ -142,8 +142,10 @@ macro_rules! define_shape {
             }
         }
         impl crate::shapes::ShapeMotion for $name {
-            fn update(&mut self) {
-
+            fn rotate(&mut self, axis: &glm::Vec3, angle: f32) {
+                let model_matrix = self.ubo.model;
+                let new_model_matrix = glm::rotate(&model_matrix, angle, axis);
+                self.ubo.model = new_model_matrix;
             }
             fn get_ubo_contents(&self) -> &UBO {
                 &self.ubo

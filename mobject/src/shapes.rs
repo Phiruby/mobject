@@ -2,9 +2,11 @@ pub mod surface;
 pub mod primitives;
 pub mod generator;
 pub mod motion;
+pub mod animations;
 pub use primitives::*;
 pub use generator::*;
 pub use motion::*;
+pub use animations::*;
 
 pub use surface::Points;
 use ash::Device;
@@ -107,7 +109,7 @@ impl Vertex<3> for Vertex2D {
 
 pub trait ShapeMotion {
     fn get_ubo_contents(&self) -> &UBO;
-    fn update(&mut self);
+    fn rotate(&mut self, axis: &glm::Vec3, angle: f32);
 }
 
 pub trait ShapeConstruction {

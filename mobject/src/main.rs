@@ -1,5 +1,5 @@
 use mobject::Scene;
-use mobject::shapes::{ObjModel, Points, Rectangle, Rotate, Shape, Triangle, Vertex2D};
+use mobject::shapes::{ObjModel, Points, Rectangle, Shape, Triangle, Vertex2D};
 use nalgebra_glm as glm;
 fn main() {
     println!("Hello, world!");
@@ -13,19 +13,9 @@ fn main() {
         Points::default()
         .include_texture("textures/basic.jpg")
     );
-    let rotating_obj = Rotate::new(
-        0.001,
-        glm::make_vec3(&[0.0, 0.0, 1.0]), obj);
-
-    let rotating_pts = Rotate::new(
-        0.005,
-        glm::make_vec3(&[0.0, 0.0, 1.0]),
-        points
-    );
-
-    scene.add(rotating_obj);
-    scene.wait(10);
-    scene.add(rotating_pts);
     scene.wait(3);
+    let pts = scene.add(points);
+    let anim = scene.animate(pts).rotate(glm::make_vec3(&[0.0, 0.0, 1.0]), 0.005);
+    scene.play(anim);
     scene.main_loop();
 }
