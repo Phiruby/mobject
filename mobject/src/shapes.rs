@@ -45,20 +45,40 @@ pub trait Vertex<const N: usize> {
 pub struct Vertex2D {
     pub position: Vec3,
     pub color: Vec3,
+    pub normal: Vec3,
     pub tex_coord: Vec2,
 }
 
+pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
+    let mut norms = Vec::with_capacity(vertices_position.len());
+    let mut i = 0;
+    // TODO: should be normal for each vertex, not each triangle
+    for idxes in indices.chunks_exact(3) {
+        if let [a, b, c] = idxes {
+            let (pt1, pt2, pt3) =( vertices_position[*a], vertices_position[*b], vertices_position[*c]);
+            let v1 = pt3 - pt1;
+            let v2 = pt2 - pt1;
+            let normal = glm::cross(&v1, &v2);
+            norms[i] = normal;
+            i += 1;
+        }
+    }
+    norms
+}
+
 impl Vertex2D {
-    pub fn new(position: Vec3, color: Vec3, tex_coord: Option<Vec2>) -> Self {
+    pub fn new(position: Vec3, color: Vec3, normal: Vec3, tex_coord: Option<Vec2>) -> Self {
         Self {
             position,
             color,
+            normal,
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
         }
     }
-    pub fn with_tex_coord(position: Vec3, tex_coord: Vec2) -> Self {
+    pub fn with_tex_coord(position: Vec3, normal: Vec3, tex_coord: Vec2) -> Self {
         Self {
             position,
+            normal,
             color: Vec3::new(1.0, 1.0, 1.0),
             tex_coord
         }
@@ -67,12 +87,13 @@ impl Vertex2D {
         Self {
             position: self.position,
             color: self.color,
+            normal: self.normal,
             tex_coord: c
         }
     }
 }
 
-impl Vertex<3> for Vertex2D {
+impl Vertex<4> for Vertex2D {
     fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
@@ -81,7 +102,7 @@ impl Vertex<3> for Vertex2D {
         }
     }
 
-    fn attribute_descriptions() -> [VertexInputAttributeDescription; 3] {
+    fn attribute_descriptions() -> [VertexInputAttributeDescription; 4] {
         [
             VertexInputAttributeDescription {
                 binding: 0,
@@ -99,8 +120,14 @@ impl Vertex<3> for Vertex2D {
                 binding: 0,
                 location: 2,
                 format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(Vertex2D, tex_coord) as u32,
+                offset: offset_of!(Vertex2D, normal) as u32,
             },
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 3,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex2D, tex_coord) as u32
+            }
         ]
     }
 }
