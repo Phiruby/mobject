@@ -26,7 +26,7 @@ struct CompletePipeline<'a> {
     tesc_path: Option<&'a str>,
     tese_path: Option<&'a str>,
     vertex_binding_description: VertexInputBindingDescription,
-    vertex_attribute_description: [VertexInputAttributeDescription; MAX_FRAMES_IN_FLIGHT as usize],
+    vertex_attribute_description: Vec<VertexInputAttributeDescription>,
     topology: PrimitiveTopology,
     render_pass: RenderPass,
     push_constant: Option<PushConstantRange>

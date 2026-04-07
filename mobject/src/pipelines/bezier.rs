@@ -5,7 +5,7 @@ use std::mem::offset_of;
 use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, DescriptorBufferInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
-use crate::shapes::{BuiltShape, Vertex2D, UBO};
+use crate::shapes::{BuiltShape, UBO, Vertex, Vertex2D};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 use crate::pipelines::{self, CompletePipeline};
 
@@ -78,7 +78,7 @@ impl BezierPipeline {
             tesc_path: Some("shaders/bezier/tes_ctrl.spv"),
             tese_path: Some("shaders/bezier/tes_eval.spv"),
             vertex_binding_description: Self::vertex_binding_description(),
-            vertex_attribute_description: Self::vertex_attribute_description(),
+            vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::PATCH_LIST,
             render_pass,
             // use to index texture element
@@ -217,26 +217,7 @@ impl BezierPipeline {
         }
     }
 
-    fn vertex_attribute_description() -> [VertexInputAttributeDescription; 3] {
-        [
-            VertexInputAttributeDescription {
-                binding: 0,
-                location: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, position) as u32,
-            },
-            VertexInputAttributeDescription {
-                binding: 0,
-                location: 1,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, color) as u32,
-            },
-            VertexInputAttributeDescription {
-                binding: 0,
-                location: 2,
-                format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(Vertex2D, tex_coord) as u32,
-            },
-        ]
+    fn vertex_attribute_description() -> [VertexInputAttributeDescription; 4] {
+        Vertex2D::attribute_descriptions()
     }
 }

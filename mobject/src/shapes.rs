@@ -50,20 +50,32 @@ pub struct Vertex2D {
 }
 
 pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
-    let mut norms = Vec::with_capacity(vertices_position.len());
-    let mut i = 0;
-    // TODO: should be normal for each vertex, not each triangle
+    assert!(!vertices_position.is_empty());
+    assert!(indices.len() % 3 == 0);
+
+    let mut normals = vec![Vec3::zeros(); vertices_position.len()];
+
     for idxes in indices.chunks_exact(3) {
-        if let [a, b, c] = idxes {
-            let (pt1, pt2, pt3) =( vertices_position[*a], vertices_position[*b], vertices_position[*c]);
-            let v1 = pt3 - pt1;
-            let v2 = pt2 - pt1;
-            let normal = glm::cross(&v1, &v2);
-            norms[i] = normal;
-            i += 1;
-        }
+        let [a, b, c] = [idxes[0], idxes[1], idxes[2]];
+
+        let p0 = vertices_position[a];
+        let p1 = vertices_position[b];
+        let p2 = vertices_position[c];
+
+        let v1 = p1 - p0;
+        let v2 = p2 - p0;
+
+        let face_normal = glm::cross(&v1, &v2);
+
+        normals[a] += face_normal;
+        normals[b] += face_normal;
+        normals[c] += face_normal;
     }
-    norms
+    for n in &mut normals {
+        *n = glm::normalize(n);
+    }
+
+    normals
 }
 
 impl Vertex2D {

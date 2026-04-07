@@ -2,6 +2,7 @@
 layout (vertices=9) out;
 layout (location = 0) in vec3 fragColor[];
 layout (location = 1) in vec2 texCoord[];
+layout (location = 2) in vec3 normals[];
 
 layout (location = 0) out vec2 textureCoord[];
 layout (location = 1) out vec3 fragmentColors[];
