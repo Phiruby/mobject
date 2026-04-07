@@ -52,21 +52,15 @@ pub struct Vertex2D {
 pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
     assert!(!vertices_position.is_empty());
     assert!(indices.len() % 3 == 0);
-
     let mut normals = vec![Vec3::zeros(); vertices_position.len()];
-
     for idxes in indices.chunks_exact(3) {
         let [a, b, c] = [idxes[0], idxes[1], idxes[2]];
-
         let p0 = vertices_position[a];
         let p1 = vertices_position[b];
         let p2 = vertices_position[c];
-
         let v1 = p1 - p0;
         let v2 = p2 - p0;
-
         let face_normal = glm::cross(&v1, &v2);
-
         normals[a] += face_normal;
         normals[b] += face_normal;
         normals[c] += face_normal;
@@ -74,7 +68,6 @@ pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec
     for n in &mut normals {
         *n = glm::normalize(n);
     }
-
     normals
 }
 
@@ -131,13 +124,13 @@ impl Vertex<4> for Vertex2D {
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
-                format: vk::Format::R32G32_SFLOAT,
+                format: vk::Format::R32G32B32_SFLOAT,
                 offset: offset_of!(Vertex2D, normal) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 3,
-                format: vk::Format::R32G32B32_SFLOAT,
+                format: vk::Format::R32G32_SFLOAT,
                 offset: offset_of!(Vertex2D, tex_coord) as u32
             }
         ]

@@ -25,7 +25,5 @@ void main() {
   vec3 diffuse = lightColor * diff;
 
   vec4 objColor = texture(texSampler[sampler_idx], fragTexCoord) * vec4(fragColor, 1.0);
-  // outColor = vec4((amient + diffuse) * vec3(objColor), 1.0);
-  // outColor = vec4(diffuse, 1.0);
-  outColor = vec4(- fragNormal, 1.0);
+  outColor = vec4((amient + diffuse) * vec3(objColor), 1.0);
 }

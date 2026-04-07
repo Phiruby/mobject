@@ -77,7 +77,7 @@ impl ObjModel {
                         pos,
                         glm::make_vec3(&[0.0, 0.0, 0.0]),
                         normal,
-                        None
+                        Some(glm::make_vec2(&[vert.texture[0], 1.0 - vert.texture[1]]))
                     )
                 }
             )
