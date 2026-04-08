@@ -74,6 +74,7 @@ macro_rules! define_shape {
                     .map(|v|
                         Vertex2D::with_tex_coord(
                             v.position,
+                            v.normal,
                             v.tex_coord
                         )
                     )

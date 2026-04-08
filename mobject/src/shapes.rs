@@ -45,20 +45,45 @@ pub trait Vertex<const N: usize> {
 pub struct Vertex2D {
     pub position: Vec3,
     pub color: Vec3,
+    pub normal: Vec3,
     pub tex_coord: Vec2,
 }
 
+pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
+    assert!(!vertices_position.is_empty());
+    assert!(indices.len() % 3 == 0);
+    let mut normals = vec![Vec3::zeros(); vertices_position.len()];
+    for idxes in indices.chunks_exact(3) {
+        let [a, b, c] = [idxes[0], idxes[1], idxes[2]];
+        let p0 = vertices_position[a];
+        let p1 = vertices_position[b];
+        let p2 = vertices_position[c];
+        let v1 = p1 - p0;
+        let v2 = p2 - p0;
+        let face_normal = glm::cross(&v1, &v2);
+        normals[a] += face_normal;
+        normals[b] += face_normal;
+        normals[c] += face_normal;
+    }
+    for n in &mut normals {
+        *n = glm::normalize(n);
+    }
+    normals
+}
+
 impl Vertex2D {
-    pub fn new(position: Vec3, color: Vec3, tex_coord: Option<Vec2>) -> Self {
+    pub fn new(position: Vec3, color: Vec3, normal: Vec3, tex_coord: Option<Vec2>) -> Self {
         Self {
             position,
             color,
+            normal,
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
         }
     }
-    pub fn with_tex_coord(position: Vec3, tex_coord: Vec2) -> Self {
+    pub fn with_tex_coord(position: Vec3, normal: Vec3, tex_coord: Vec2) -> Self {
         Self {
             position,
+            normal,
             color: Vec3::new(1.0, 1.0, 1.0),
             tex_coord
         }
@@ -67,12 +92,13 @@ impl Vertex2D {
         Self {
             position: self.position,
             color: self.color,
+            normal: self.normal,
             tex_coord: c
         }
     }
 }
 
-impl Vertex<3> for Vertex2D {
+impl Vertex<4> for Vertex2D {
     fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
@@ -81,7 +107,7 @@ impl Vertex<3> for Vertex2D {
         }
     }
 
-    fn attribute_descriptions() -> [VertexInputAttributeDescription; 3] {
+    fn attribute_descriptions() -> [VertexInputAttributeDescription; 4] {
         [
             VertexInputAttributeDescription {
                 binding: 0,
@@ -98,9 +124,15 @@ impl Vertex<3> for Vertex2D {
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
-                format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(Vertex2D, tex_coord) as u32,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: offset_of!(Vertex2D, normal) as u32,
             },
+            VertexInputAttributeDescription {
+                binding: 0,
+                location: 3,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: offset_of!(Vertex2D, tex_coord) as u32
+            }
         ]
     }
 }

@@ -1,8 +1,15 @@
 use mobject::Scene;
-use mobject::shapes::{ObjModel, Points};
+// use mobject::shapes::surface::Surface3D;
+use mobject::shapes::{ObjModel, Points, Rectangle};
 use nalgebra_glm as glm;
+
+
 fn main() {
     let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
+
+    let rect = Box::new(
+        Rectangle::default()
+    );
     let mut scene = Scene::new();
 
     let points = Box::new(
@@ -13,7 +20,12 @@ fn main() {
     let pts = scene.add(points);
     let anim = scene.animate(pts).rotate(glm::make_vec3(&[0.0, 0.0, 1.0]), 0.005);
     scene.play(anim);
-
+    scene.wait(3);
+    let r = scene.add(rect);
+    let anim = scene.animate(r).rotate(
+        glm::make_vec3(&[0.0, 0.0, 1.0]), 0.001
+    );
+    scene.play(anim);
     scene.wait(5);
     let obj = scene.add(obj);
     scene.wait(5);

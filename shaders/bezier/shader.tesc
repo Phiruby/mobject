@@ -2,9 +2,13 @@
 layout (vertices=9) out;
 layout (location = 0) in vec3 fragColor[];
 layout (location = 1) in vec2 texCoord[];
+layout (location = 2) in vec3 fragNormals[];
+layout (location = 3) in vec3 worldPositions[];
 
 layout (location = 0) out vec2 textureCoord[];
 layout (location = 1) out vec3 fragmentColors[];
+layout (location = 2) out vec3 outNormals[];
+layout (location = 3) out vec3 outPos[];
 
 in gl_PerVertex
 {
@@ -18,6 +22,8 @@ void main() {
   gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
   textureCoord[gl_InvocationID] = texCoord[gl_InvocationID];
   fragmentColors[gl_InvocationID] = fragColor[gl_InvocationID];
+  outNormals[gl_InvocationID] = fragNormals[gl_InvocationID];
+  outPos[gl_InvocationID] = worldPositions[gl_InvocationID];
 
   if (gl_InvocationID == 0) {
       // https://docs.vulkan.org/spec/latest/chapters/tessellation.html#tessellation-triangle-tessellation
