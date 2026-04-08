@@ -16,10 +16,13 @@ layout(set = 0, binding = 1) uniform sampler2D texSampler[];
 void main() {
   float ambientStrength = 0.1;
   vec3 lightColor = vec3(0.7, 0.7, 0.7);
-  vec3 lightPos = vec3(10.0, 0.0, 0.0);
+  vec3 lightPos = vec3(0.0, 0.0, 100.0);
 
   vec3 amient = ambientStrength * lightColor;
   vec3 norm = normalize(fragNormal);
+  if (!gl_FrontFacing) {
+      norm = -norm;
+  }
   vec3 lightDir = normalize(lightPos - inPos);
   float diff = max(dot(norm, lightDir), 0.0);
   vec3 diffuse = lightColor * diff;

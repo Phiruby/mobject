@@ -55,7 +55,6 @@ impl ObjModel {
     pub fn load(obj_file: &str) -> Self {
         let input = std::io::BufReader::new(std::fs::File::open(obj_file).unwrap());
         let model: Obj<TexturedVertex, u32> = load_obj(input).unwrap();
-        dbg!(model.vertices.len());
 
         let positions: Vec<Vec3> = model
             .vertices
@@ -64,19 +63,15 @@ impl ObjModel {
                 glm::make_vec3(&vert.position)
             })
             .collect();
-        let indices: Vec<usize> = model.indices.iter().map(|&x| x as usize).collect();
-
-        let normals = shapes::compute_normals(&indices, &positions);
 
         let vertices: Vec<Vertex2D> = model.vertices
             .iter()
             .zip(positions.into_iter())
-            .zip(normals.into_iter())
-            .map(|((vert, pos), normal)| {
+            .map(|(vert, pos)| {
                     Vertex2D::new(
                         pos,
                         glm::make_vec3(&[0.0, 0.0, 0.0]),
-                        normal,
+                        glm::make_vec3(&vert.normal),
                         Some(glm::make_vec2(&[vert.texture[0], 1.0 - vert.texture[1]]))
                     )
                 }
@@ -84,7 +79,6 @@ impl ObjModel {
             .collect();
 
         let indices = model.indices;
-        dbg!(vertices.len(), indices.len());
         Self::with_indices(vertices, indices)
     }
 }
@@ -120,7 +114,7 @@ impl Default for Rectangle {
                 Vertex2D::new(
                     pos,
                     Vec3::new(1.0, 0.0, 0.0),
-                    norm,
+                    -norm,
                     None
                 )
             )
