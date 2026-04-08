@@ -1,4 +1,3 @@
-use std::ffi::c_void;
 
 use crate::buffers;
 use crate::swapchain;
@@ -7,14 +6,13 @@ use ash::vk::Sampler;
 use ash::vk::SamplerCreateInfo;
 use ash::vk::{
     self, AccessFlags, Buffer, BufferImageCopy, BufferUsageFlags, CommandPool, DependencyFlags,
-    DeviceMemory, Extent2D, Extent3D, Format, Image, ImageAspectFlags, ImageCreateFlags,
-    ImageCreateInfo, ImageLayout, ImageMemoryBarrier, ImageSubresource, ImageSubresourceLayers,
-    ImageSubresourceRange, ImageTiling, ImageUsageFlags, ImageView, ImageViewCreateInfo,
-    ImageViewType, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, Offset3D,
+    DeviceMemory, Extent3D, Format, Image, ImageAspectFlags,
+    ImageCreateInfo, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
+    ImageSubresourceRange, ImageTiling, ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, Offset3D,
     PhysicalDevice, PhysicalDeviceMemoryProperties, PipelineStageFlags, Queue, StructureType,
 };
 use ash::{Device, Instance};
-use image::{DynamicImage, ImageBuffer, ImageReader, RgbaImage};
+use image::{ImageReader, RgbaImage};
 fn load_image(path: &str) -> RgbaImage {
     ImageReader::open(path)
         .unwrap()
@@ -74,7 +72,7 @@ fn transition_image_layout(
     pool: vk::CommandPool,
     image: Image,
     mip_levels: u32,
-    format: Format,
+    _format: Format,
     old_layout: ImageLayout,
     new_layout: ImageLayout,
     graphics_queue: Queue,
@@ -100,8 +98,8 @@ fn transition_image_layout(
         ..Default::default()
     };
 
-    let mut source_stage;
-    let mut destination_stage;
+    let source_stage;
+    let destination_stage;
     match (old_layout, new_layout) {
         (ImageLayout::UNDEFINED, ImageLayout::TRANSFER_DST_OPTIMAL) => {
             barrier.src_access_mask = AccessFlags::empty();
@@ -361,7 +359,7 @@ fn generate_mipmaps(
     };
     let mut mip_width = tex_width;
     let mut mip_height = tex_height;
-    for i in (1..mip_levels) {
+    for i in 1..mip_levels  {
         barrier.subresource_range.base_mip_level = i - 1;
         barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
         barrier.new_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
@@ -439,10 +437,10 @@ fn generate_mipmaps(
             )
         };
 
-        if (mip_height > 1) {
+        if mip_height > 1  {
             mip_height = mip_height / 2;
         }
-        if (mip_width > 1) {
+        if mip_width > 1  {
             mip_width = mip_width / 2;
         }
     }

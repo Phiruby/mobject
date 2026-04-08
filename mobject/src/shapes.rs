@@ -3,7 +3,6 @@ pub mod primitives;
 pub mod generator;
 pub mod animations;
 pub use primitives::*;
-pub use generator::*;
 pub use animations::*;
 
 pub use surface::Points;
@@ -14,7 +13,6 @@ use ash::vk::{
 };
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
-use std::ops::Deref;
 use std::{mem::offset_of, os::raw::c_void};
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
@@ -178,7 +176,7 @@ pub fn mobjects_to_vertices_and_indices(
 ) -> (Vec<Vertex2D>, Vec<u32>) {
     let mut vertices: Vec<Vertex2D> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
-    for i in (0..mobjects.len()) {
+    for i in 0..mobjects.len()  {
         let current_length = vertices.len() as u32;
         let shape_vertices = mobjects[i].vertices2d();
         let shape_indices = mobjects[i].indices();

@@ -1,7 +1,6 @@
 use ash::Device;
 use ash::vk::{
-    self, AccessFlags, AttachmentDescription, AttachmentReference, ClearColorValue,
-    ClearDepthStencilValue, ClearValue, PipelineBindPoint, RenderPass, RenderPassCreateInfo,
+    self, AccessFlags, AttachmentDescription, AttachmentReference, PipelineBindPoint, RenderPass, RenderPassCreateInfo,
     StructureType, SubpassDependency, SubpassDescription, SurfaceFormatKHR,
 };
 

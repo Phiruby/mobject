@@ -1,19 +1,19 @@
 use std::ffi::c_void;
 use std::ptr::copy_nonoverlapping;
 
-use crate::shapes::{self, Shape, UBO, Vertex2D};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass};
+use crate::shapes::Vertex2D;
+use crate::MAX_FRAMES_IN_FLIGHT;
 use ash::vk::{
-    Buffer, CommandBuffer, CommandBufferResetFlags, DeviceMemory, Extent2D, Framebuffer,
-    MemoryMapFlags, Pipeline, PresentInfoKHR, Queue, RenderPass, SubmitInfo, SwapchainKHR,
+    DeviceMemory,
+    MemoryMapFlags,
 };
-use ash::{Device, khr::swapchain};
+use ash::Device;
 use ash::{
     Instance,
     vk::{self, Fence, FenceCreateInfo, Handle, Semaphore, SemaphoreCreateInfo, StructureType},
 };
 use glfw::{GlfwReceiver, WindowEvent};
-use glfw::{self, Glfw, PWindow, ffi::VkSurfaceKHR};
+use glfw::{self, PWindow, ffi::VkSurfaceKHR};
 pub fn create_glfw_window(width: u32, height: u32) -> (PWindow, Vec<String>, GlfwReceiver<(f64, WindowEvent)>) {
     let mut wrapper = glfw::init_no_callbacks().unwrap();
     wrapper.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
@@ -31,7 +31,7 @@ pub fn create_glfw_window(width: u32, height: u32) -> (PWindow, Vec<String>, Glf
 pub fn create_surface(instance: &Instance, window: &PWindow) -> VkSurfaceKHR {
     let glfw_vk_instance = instance.handle().as_raw() as glfw::ffi::VkInstance;
     let mut surface = VkSurfaceKHR::default();
-    let mut surface_ptr: *mut VkSurfaceKHR = &mut surface;
+    let surface_ptr: *mut VkSurfaceKHR = &mut surface;
     unsafe { window.create_window_surface(glfw_vk_instance, std::ptr::null(), surface_ptr) };
     surface
 }

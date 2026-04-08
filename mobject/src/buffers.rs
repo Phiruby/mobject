@@ -1,19 +1,17 @@
 use std::array;
-use std::char::MAX;
 use std::ffi::c_void;
 
-use crate::device::{self, QueueFamilies};
-use crate::shapes::{BuiltShape, GlobalUBO, Shape, UBO, Vertex2D};
+use crate::device::QueueFamilies;
+use crate::shapes::Vertex2D;
 use crate::{MAX_FRAMES_IN_FLIGHT, swapchain, texture};
 use ash::vk::{
-    self, Buffer, BufferCreateInfo, BufferUsageFlags, ClearColorValue, ClearDepthStencilValue,
-    ClearValue, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool,
-    CommandPoolCreateInfo, DescriptorSet, DeviceMemory, DeviceSize, Extent2D, Fence, Format,
-    FormatFeatureFlags, Framebuffer, FramebufferCreateInfo, Handle, Image, ImageAspectFlags,
+    self, Buffer, BufferCreateInfo, BufferUsageFlags, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool,
+    CommandPoolCreateInfo, DeviceMemory, DeviceSize, Extent2D, Fence, Format,
+    FormatFeatureFlags, Framebuffer, FramebufferCreateInfo, Image, ImageAspectFlags,
     ImageTiling, ImageUsageFlags, ImageView, MemoryAllocateInfo, MemoryMapFlags,
-    MemoryPropertyFlags, MemoryRequirements, Offset2D, PhysicalDevice,
-    PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, Queue, Rect2D,
-    RenderPass, RenderPassBeginInfo, StructureType, SubmitInfo, SubpassContents,
+    MemoryPropertyFlags, MemoryRequirements, PhysicalDevice,
+    PhysicalDeviceMemoryProperties, Queue,
+    RenderPass, StructureType, SubmitInfo,
 };
 use ash::{Device, Instance};
 
@@ -45,7 +43,7 @@ pub fn create_frame_buffers(
 
     framebuffer_infos
         .iter()
-        .map(|(info)| unsafe { device.create_framebuffer(info, None) }.unwrap())
+        .map(|info | unsafe { device.create_framebuffer(info, None) }.unwrap())
         .collect::<Vec<Framebuffer>>()
 }
 
@@ -212,9 +210,9 @@ fn find_depth_buffer_format(
             let props = unsafe {
                 instance.get_physical_device_format_properties(physical_device, candidate)
             };
-            ((tiling == ImageTiling::LINEAR && (props.linear_tiling_features.intersects(features)))
+            (tiling == ImageTiling::LINEAR && (props.linear_tiling_features.intersects(features)))
                 || (tiling == ImageTiling::OPTIMAL
-                    && (props.optimal_tiling_features.intersects(features))))
+                    && (props.optimal_tiling_features.intersects(features)))
         })
         .expect("Could not find a format for depth buffer")
 }

@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::mem::offset_of;
 
-use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, DescriptorBufferInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderStageFlags, StructureType, SubpassContents, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
+use ash::vk::{self, Buffer, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
 use crate::shapes::{BuiltShape, UBO, Vertex, Vertex2D};

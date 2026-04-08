@@ -3,7 +3,7 @@ use ash::{
     Device, Instance,
     khr::surface,
     vk::{
-        self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceDescriptorIndexingFeatures, PhysicalDeviceFeatures, PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType, SurfaceKHR
+        self, DeviceCreateInfo, DeviceQueueCreateInfo, PhysicalDevice, PhysicalDeviceDescriptorIndexingFeatures, PhysicalDeviceFeatures2, PhysicalDeviceProperties, QueueFamilyProperties2, StructureType, SurfaceKHR
     },
 };
 use dialoguer::FuzzySelect;
@@ -39,7 +39,7 @@ pub fn select_physical_device(instance: &Instance) -> PhysicalDevice {
 }
 
 
-fn enable_descriptor_indexing<'a, 'b>(device: PhysicalDevice, instance: &'a Instance) -> (Box<PhysicalDeviceFeatures2<'b>>, Box<PhysicalDeviceDescriptorIndexingFeatures>) {
+fn enable_descriptor_indexing<'a, 'b>(device: PhysicalDevice, instance: &'a Instance) -> (Box<PhysicalDeviceFeatures2<'b>>, Box<PhysicalDeviceDescriptorIndexingFeatures<'a>>) {
     let mut descriptor_indexing_features = Box::new(PhysicalDeviceDescriptorIndexingFeatures {
         s_type: StructureType::PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
         p_next: std::ptr::null_mut(),
@@ -99,7 +99,7 @@ fn get_presentation_queue_index(
     properties
         .iter()
         .enumerate()
-        .filter(|(queue_family_index, family_properties)| {
+        .filter(|(queue_family_index, _family_properties)| {
             unsafe {
                 surface_instance.get_physical_device_surface_support(
                     physical_device,

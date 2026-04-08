@@ -3,7 +3,7 @@ use ash::vk::{
     Buffer, DeviceMemory, PhysicalDeviceMemoryProperties
 };
 use nalgebra_glm as glm;
-use nalgebra_glm::{Vec2, Vec3};
+use nalgebra_glm::Vec3;
 use obj::{Obj, TexturedVertex, load_obj};
 use std::{os::raw::c_void};
 

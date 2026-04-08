@@ -1,13 +1,11 @@
-use std::ffi::CString;
 use std::os::raw::c_void;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, Extent2D, GraphicsPipelineCreateInfo, ImageView, Offset2D, Pipeline, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, Rect2D, RenderPass, Sampler, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, Viewport, WriteDescriptorSet
+    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, ImageView, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, Sampler, ShaderModule, ShaderModuleCreateInfo, StructureType, WriteDescriptorSet
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;
-use crate::shapes::{Shape, Vertex, Vertex2D};
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
     let byte_code: Vec<u32> = shader_code
@@ -142,8 +140,8 @@ pub fn mobject_descriptor_sets(
     descriptor_set_layout: DescriptorSetLayout,
     descriptor_pool: DescriptorPool,
     uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-    texture_image_view: ImageView,
-    sampler: Sampler,
+    _texture_image_view: ImageView,
+    _sampler: Sampler,
 ) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
     let layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
     let alloc_info = DescriptorSetAllocateInfo {

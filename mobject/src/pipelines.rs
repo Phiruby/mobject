@@ -243,7 +243,7 @@ fn create_graphics_pipeline(
         stencil_test_enable: vk::FALSE,
         ..Default::default()
     };
-    let mut pipeline_crate_info = GraphicsPipelineCreateInfo {
+    let pipeline_crate_info = GraphicsPipelineCreateInfo {
         s_type: StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
         stage_count: shader_stages.len() as u32,
         p_stages: shader_stages.as_ptr(),

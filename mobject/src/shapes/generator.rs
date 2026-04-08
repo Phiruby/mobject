@@ -1,10 +1,3 @@
-use ash::vk::{Buffer, DeviceMemory};
-use ash::Device;
-use crate::MAX_FRAMES_IN_FLIGHT;
-use crate::buffers;
-use crate::shapes::{UBO, Shape, BuiltShape, Vertex2D, ShapeConstruction, ShapeMotion};
-use nalgebra_glm as glm;
-use crate::pipelines::Pipelines;
 #[macro_export]
 macro_rules! define_shape {
     (

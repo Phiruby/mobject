@@ -1,11 +1,11 @@
 use crate::device::QueueFamilies;
 use ash::vk::{
     self, ColorSpaceKHR, ComponentMapping, ComponentSwizzle, CompositeAlphaFlagsKHR, Extent2D,
-    Format, Image, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageView,
+    Format, Image, ImageAspectFlags, ImageSubresourceRange, ImageView,
     ImageViewCreateInfo, ImageViewType, PhysicalDevice, PresentModeKHR, SharingMode, StructureType,
     SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR, SwapchainCreateInfoKHR, SwapchainKHR,
 };
-use ash::{Device, Entry, Instance, khr};
+use ash::{Device, khr};
 use glfw::PWindow;
 
 pub struct SwapchainSupport {

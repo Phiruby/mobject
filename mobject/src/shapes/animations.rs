@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use crate::{scene::{MobjectId, Scene}, shapes::{BuiltShape, GlobalUBO}};
-use nalgebra_glm::{Vec3, Mat4};
+use crate::{scene::MobjectId, shapes::{BuiltShape, GlobalUBO}};
+use nalgebra_glm::Vec3;
 pub trait Animation {
     fn update(&mut self, dt: f32, obj: &mut Box<dyn BuiltShape>);
     fn is_finished(&self) -> bool;
@@ -34,7 +34,7 @@ pub struct CameraAnimation {
 }
 
 impl Animation for Rotate {
-    fn update(&mut self, dt: f32, obj: &mut Box<dyn BuiltShape>) {
+    fn update(&mut self, _dt: f32, obj: &mut Box<dyn BuiltShape>) {
         obj.rotate(&self.axis, self.speed);
     }
 

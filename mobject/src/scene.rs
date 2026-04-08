@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, MemoryPropertyFlags, Offset2D, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, Pipeline, PipelineLayout, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -7,7 +7,7 @@ use crate::device::QueueFamilies;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
-use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape, UBO};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CString, c_void};
 use std::ops::{Deref, DerefMut};
@@ -173,7 +173,7 @@ impl Scene {
         let graphics_queue =
             unsafe { logical_device.get_device_queue(0, queue_families.graphics_index as u32) };
 
-        let (uniform_buffers, uniform_buffer_memories, uniform_buffer_mapped_memories) =
+        let (uniform_buffers, _uniform_buffer_memories, uniform_buffer_mapped_memories) =
             buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
                 &logical_device,
                 physical_device_memory_properties,
@@ -310,7 +310,7 @@ impl Scene {
         }
     }
 
-    fn add_texture_to_scene(&self, image: Image, memory: DeviceMemory, mip_levels: u32, image_view: ImageView) {
+    fn add_texture_to_scene(&self, _image: Image, _memory: DeviceMemory, _mip_levels: u32, image_view: ImageView) {
         self.scene_descriptor_sets
             .iter()
             .for_each(|desc_set| {
