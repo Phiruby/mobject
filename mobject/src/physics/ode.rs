@@ -3,7 +3,7 @@ struct OdeSolver ();
 
 struct StateDerivative {
     velocity: Vec3,
-    rotation_prime: Mat3x3,
+    rotation_prime: Quat,
     force: Vec3,
     torque: Vec3
 }
@@ -49,7 +49,8 @@ impl std::ops::Add<StateDerivative> for PhysicalState {
             angular_momentum: self.angular_momentum,
             inertia_inv: self.inertia_inv,
             velocity: self.velocity + rhs.velocity,
-            angular_velocity: self.angular_velocity + rhs.rotation_prime * self.orientation,
+            // TODO: current impl and derivations assumed constant omega
+            angular_velocity: self.angular_velocity,
             force: self.force + rhs.force,
             torque: self.torque + rhs.torque
         }
@@ -58,7 +59,13 @@ impl std::ops::Add<StateDerivative> for PhysicalState {
 
 impl PhysicalState {
     fn differentiate(&self) -> StateDerivative {
-        StateDerivative { velocity: self.velocity, rotation_prime: Mat3x3::identity(), force: nalgebra_glm::make_vec3(&[0.0, 0.0, 0.0]), torque: nalgebra_glm::make_vec3(&[0.0, 0.0, 0.0]) }
+        let angular_quat = nalgebra_glm::quat(0.0, self.angular_velocity.x, self.angular_velocity.y, self.angular_velocity.z);
+        StateDerivative {
+            velocity: self.velocity,
+            rotation_prime: 0.5 * self.orientation * angular_quat,
+            force: nalgebra_glm::make_vec3(&[0.0, 0.0, 0.0]),
+            torque: nalgebra_glm::make_vec3(&[0.0, 0.0, 0.0])
+        }
     }
 }
 
