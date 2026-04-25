@@ -13,7 +13,9 @@ use ash::vk::{
 };
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
+use std::fmt::Debug;
 use std::{mem::offset_of, os::raw::c_void};
+use crate::physics::pbd::Constraint;
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
@@ -38,13 +40,18 @@ pub trait Vertex<const N: usize> {
     fn binding_description() -> VertexInputBindingDescription;
 }
 
+// TODO: all fields in this struct will be sent to GPU!
+// will need to drop / convert to `GraphicsVertex`
 #[repr(C)]
-#[derive(Clone, Debug)]
 pub struct Vertex2D {
     pub position: Vec3,
     pub color: Vec3,
     pub normal: Vec3,
     pub tex_coord: Vec2,
+    pub velocity: Vec3,
+    // inverse of mass: 1/m
+    pub w: f32,
+    pub constraints: Vec<Box<dyn Constraint>>
 }
 
 pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
@@ -76,6 +83,9 @@ impl Vertex2D {
             color,
             normal,
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
+            velocity: Vec3::zeros(),
+            w: 1.0,
+            constraints: Vec::new()
         }
     }
     pub fn with_tex_coord(position: Vec3, normal: Vec3, tex_coord: Vec2) -> Self {
@@ -83,7 +93,10 @@ impl Vertex2D {
             position,
             normal,
             color: Vec3::new(1.0, 1.0, 1.0),
-            tex_coord
+            tex_coord,
+            velocity: Vec3::zeros(),
+            w: 1.0,
+            constraints: Vec::new()
         }
     }
     pub fn update_tex_coord(self, c: Vec2) -> Self {
@@ -91,7 +104,10 @@ impl Vertex2D {
             position: self.position,
             color: self.color,
             normal: self.normal,
-            tex_coord: c
+            tex_coord: c,
+            velocity: self.velocity,
+            w: self.w,
+            constraints: self.constraints
         }
     }
 }
@@ -186,4 +202,32 @@ pub fn mobjects_to_vertices_and_indices(
             .for_each(|&i| indices.push(i + current_length));
     }
     (vertices, indices)
+}
+
+impl Clone for Vertex2D {
+    fn clone(&self) -> Self {
+        Self {
+            position: self.position,
+            color: self.color,
+            normal: self.normal,
+            tex_coord: self.tex_coord,
+            velocity: self.velocity,
+            w: self.w,
+
+            constraints: Vec::new()
+        }
+    }
+}
+
+impl Debug for Vertex2D {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Vertex2D")
+            .field("position", &self.position)
+            .field("color", &self.color)
+            .field("normal", &self.normal)
+            .field("tex_coord", &self.tex_coord)
+            .field("velocity", &self.velocity)
+            .field("w", &self.w)
+            .finish()
+    }
 }
