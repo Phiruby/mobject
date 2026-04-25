@@ -7,12 +7,12 @@ use nalgebra_glm::Vec3;
 use obj::{Obj, TexturedVertex, load_obj};
 use std::{os::raw::c_void};
 
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
 define_shape!(
     pub struct Triangle {
-        vertices: Vec<Vertex2D>,
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
@@ -35,7 +35,7 @@ impl Default for Triangle {
             .zip(normals.into_iter())
             .zip(colors.into_iter())
             .map(|((pos, norm), col)| {
-                Vertex2D::new(pos, col, norm, None)
+                RenderVertex::new(pos, col, norm, None)
             })
             .collect();
 
@@ -45,7 +45,7 @@ impl Default for Triangle {
 
 define_shape!(
     pub struct ObjModel {
-        vertices: Vec<Vertex2D>,
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
@@ -64,11 +64,11 @@ impl ObjModel {
             })
             .collect();
 
-        let vertices: Vec<Vertex2D> = model.vertices
+        let vertices: Vec<RenderVertex> = model.vertices
             .iter()
             .zip(positions.into_iter())
             .map(|(vert, pos)| {
-                    Vertex2D::new(
+                    RenderVertex::new(
                         pos,
                         glm::make_vec3(&[0.0, 0.0, 0.0]),
                         glm::make_vec3(&vert.normal),
@@ -85,13 +85,13 @@ impl ObjModel {
 
 define_shape!(
     pub struct Rectangle {
-        vertices: [Vertex2D; 4],
+        vertices: [RenderVertex; 4],
         indices: Vec<u32>,
     },
     Pipelines::Primitive
 );
 impl Rectangle {
-    pub fn load(vertices: [Vertex2D; 4]) -> Self {
+    pub fn load(vertices: [RenderVertex; 4]) -> Self {
         Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
     }
 }
@@ -107,11 +107,11 @@ impl Default for Rectangle {
         ];
         let normals = shapes::compute_normals(&[0, 1, 2, 2, 3, 0], &positions);
 
-        let vertices: Vec<Vertex2D> = positions
+        let vertices: Vec<RenderVertex> = positions
             .into_iter()
             .zip(normals.into_iter())
             .map(|(pos, norm)|
-                Vertex2D::new(
+                RenderVertex::new(
                     pos,
                     Vec3::new(1.0, 0.0, 0.0),
                     -norm,

@@ -1,6 +1,6 @@
 use nalgebra_glm::{Mat3x3, Vec3, Quat};
 
-use crate::shapes::{BuiltShape, Vertex2D};
+use crate::shapes::{BuiltShape, PhysicsVertex};
 struct PBDSolver ();
 
 struct ConstrainedGradient {
@@ -24,7 +24,7 @@ pub trait Constraint {
 /// the `attach_to` vertex to
 pub struct AttachmentConstraint<'a> {
     inp_vertex_index: usize,
-    attached_to: &'a Vertex2D
+    attached_to: &'a PhysicsVertex
 }
 
 impl Constraint for AttachmentConstraint<'_> {

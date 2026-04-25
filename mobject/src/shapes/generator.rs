@@ -10,6 +10,7 @@ macro_rules! define_shape {
         $vis struct $name {
             pub vertices: $vty,
             pub indices:  $ity,
+            pub physics_vertices: Vec<crate::shapes::PhysicsVertex>,
             texture_path: Option<String>,
             uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -19,44 +20,59 @@ macro_rules! define_shape {
         }
 
         impl $name {
-            pub fn with_ubo(vertices: $vty, indices: $ity, ubo: UBO) -> Self {
+            pub fn new() -> Self {
                 Self {
-                    vertices,
-                    indices,
+                    vertices: Vec::new().try_into().unwrap(),
+                    indices: Vec::new(),
+                    physics_vertices: Vec::new(),
                     uniform_buffers: None,
                     uniform_buffer_memories: None,
                     uniform_mapped_memories: None,
-                    ubo,
+                    ubo: UBO { model: glm::identity() },
                     texture_path: None,
                     pipeline: $pipeline
                 }
             }
 
-            pub fn with_texture(vertices: $vty, indices: $ity, image_path: String) -> Self {
-                let mut me = Self::with_ubo(
-                    vertices,
-                    indices,
-                    UBO { model: glm::identity() },
-                );
-                me.texture_path = Some(image_path);
-                me
+            pub fn with_ubo(self, ubo: UBO) -> Self {
+                Self {
+                    ubo,
+                    ..self
+                }
             }
 
-            pub fn with_indices(vertices: $vty, indices: $ity) -> Self {
-                Self::with_ubo(
-                    vertices,
-                    indices,
-                    UBO { model: glm::identity() },
-                )
+            pub fn with_texture(self, image_path: String) -> Self {
+                Self {
+                    texture_path: Some(image_path),
+                    ..self
+                }
             }
 
-            pub fn new(vertices: $vty) -> Self {
-                let nvertices: u32 = vertices.len() as u32;
-                Self::with_ubo(
+            pub fn with_indices(self, indices: $ity) -> Self {
+                Self {
+                    indices,
+                    ..self
+                }
+            }
+
+            pub fn with_vertices(self, vertices: $vty) -> Self {
+                let physics_vertices = vertices.iter().map(|v| crate::shapes::PhysicsVertex::new(v.position)).collect();
+                Self {
                     vertices,
-                    (0..nvertices).collect(),
-                    UBO { model: glm::identity() },
-                )
+                    physics_vertices,
+                    ..self
+                }
+            }
+
+            pub fn with_velocities(self, velocities: Vec<Vec3>) -> Self {
+                let mut pv = self.physics_vertices;
+                for (v, vel) in pv.iter_mut().zip(velocities.iter()) {
+                    v.velocity = *vel;
+                }
+                Self {
+                    physics_vertices: pv,
+                    ..self
+                }
             }
 
             pub fn include_texture(self, texture_path: &str) -> Self {
@@ -65,13 +81,13 @@ macro_rules! define_shape {
                     vertices: self.vertices
                     .iter()
                     .map(|v|
-                        Vertex2D::with_tex_coord(
+                        RenderVertex::with_tex_coord(
                             v.position,
                             v.normal,
                             v.tex_coord
                         )
                     )
-                    .collect::<Vec<Vertex2D>>()
+                    .collect::<Vec<RenderVertex>>()
                     .try_into()
                     .unwrap(),
                     ..self
@@ -106,12 +122,12 @@ macro_rules! define_shape {
         }
 
         impl crate::shapes::ShapeConstruction for $name {
-            fn get_vertices(&self) -> &[Vertex2D] {
+            fn get_vertices(&self) -> &[RenderVertex] {
                 &self.vertices
             }
 
-            fn get_mut_vertices(&mut self) -> &mut [Vertex2D] {
-                &mut self.vertices
+            fn get_mut_vertices(&mut self) -> &mut [crate::shapes::PhysicsVertex] {
+                &mut self.physics_vertices
             }
 
             fn get_pipeline(&self) -> Pipelines {

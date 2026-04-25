@@ -43,15 +43,31 @@ pub trait Vertex<const N: usize> {
 // TODO: all fields in this struct will be sent to GPU!
 // will need to drop / convert to `GraphicsVertex`
 #[repr(C)]
-pub struct Vertex2D {
+#[derive(Debug, Clone)]
+pub struct RenderVertex {
     pub position: Vec3,
     pub color: Vec3,
     pub normal: Vec3,
     pub tex_coord: Vec2,
+}
+
+pub struct PhysicsVertex {
+    pub position: Vec3,
     pub velocity: Vec3,
     // inverse of mass: 1/m
     pub w: f32,
     pub constraints: Vec<Box<dyn Constraint>>
+}
+
+impl PhysicsVertex {
+    pub fn new(position: Vec3) -> Self {
+        Self {
+            position,
+            velocity: Vec3::new(0.0, 0.0, 0.0),
+            w: 1.0,
+            constraints: Vec::new()
+        }
+    }
 }
 
 pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
@@ -76,16 +92,13 @@ pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec
     normals
 }
 
-impl Vertex2D {
+impl RenderVertex {
     pub fn new(position: Vec3, color: Vec3, normal: Vec3, tex_coord: Option<Vec2>) -> Self {
         Self {
             position,
             color,
             normal,
             tex_coord: tex_coord.unwrap_or(Vec2::new(0.0, 0.0)),
-            velocity: Vec3::zeros(),
-            w: 1.0,
-            constraints: Vec::new()
         }
     }
     pub fn with_tex_coord(position: Vec3, normal: Vec3, tex_coord: Vec2) -> Self {
@@ -94,9 +107,6 @@ impl Vertex2D {
             normal,
             color: Vec3::new(1.0, 1.0, 1.0),
             tex_coord,
-            velocity: Vec3::zeros(),
-            w: 1.0,
-            constraints: Vec::new()
         }
     }
     pub fn update_tex_coord(self, c: Vec2) -> Self {
@@ -105,18 +115,15 @@ impl Vertex2D {
             color: self.color,
             normal: self.normal,
             tex_coord: c,
-            velocity: self.velocity,
-            w: self.w,
-            constraints: self.constraints
         }
     }
 }
 
-impl Vertex<4> for Vertex2D {
+impl Vertex<4> for RenderVertex {
     fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
-            stride: size_of::<Vertex2D>() as u32,
+            stride: size_of::<RenderVertex>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }
     }
@@ -127,25 +134,25 @@ impl Vertex<4> for Vertex2D {
                 binding: 0,
                 location: 0,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, position) as u32,
+                offset: offset_of!(RenderVertex, position) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 1,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, color) as u32,
+                offset: offset_of!(RenderVertex, color) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, normal) as u32,
+                offset: offset_of!(RenderVertex, normal) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 3,
                 format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(Vertex2D, tex_coord) as u32
+                offset: offset_of!(RenderVertex, tex_coord) as u32
             }
         ]
     }
@@ -158,13 +165,13 @@ pub trait ShapeMotion {
 
 pub trait ShapeConstruction {
     fn get_pipeline(&self) -> Pipelines;
-    fn vertices2d(&self) -> &[Vertex2D] {
+    fn vertices2d(&self) -> &[RenderVertex] {
         self.get_vertices()
     }
-    fn get_mut_vertices(&mut self) -> &mut [Vertex2D];
-    fn get_vertices(&self) -> &[Vertex2D];
+    fn get_mut_vertices(&mut self) -> &mut [PhysicsVertex];
+    fn get_vertices(&self) -> &[RenderVertex];
     fn indices(&self) -> &[u32];
-    fn vertices_and_indices(&self) -> (&[Vertex2D], &[u32]) {
+    fn vertices_and_indices(&self) -> (&[RenderVertex], &[u32]) {
         (self.get_vertices(), self.indices())
     }
     fn get_uniform_buffer(
@@ -190,8 +197,8 @@ pub trait Shape {
 
 pub fn mobjects_to_vertices_and_indices(
     mobjects: &[&Mobject],
-) -> (Vec<Vertex2D>, Vec<u32>) {
-    let mut vertices: Vec<Vertex2D> = Vec::new();
+) -> (Vec<RenderVertex>, Vec<u32>) {
+    let mut vertices: Vec<RenderVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     for i in 0..mobjects.len()  {
         let current_length = vertices.len() as u32;
@@ -203,32 +210,4 @@ pub fn mobjects_to_vertices_and_indices(
             .for_each(|&i| indices.push(i + current_length));
     }
     (vertices, indices)
-}
-
-impl Clone for Vertex2D {
-    fn clone(&self) -> Self {
-        Self {
-            position: self.position,
-            color: self.color,
-            normal: self.normal,
-            tex_coord: self.tex_coord,
-            velocity: self.velocity,
-            w: self.w,
-
-            constraints: Vec::new()
-        }
-    }
-}
-
-impl Debug for Vertex2D {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Vertex2D")
-            .field("position", &self.position)
-            .field("color", &self.color)
-            .field("normal", &self.normal)
-            .field("tex_coord", &self.tex_coord)
-            .field("velocity", &self.velocity)
-            .field("w", &self.w)
-            .finish()
-    }
 }

@@ -4,7 +4,7 @@ use std::ffi::c_void;
 use ash::vk::{self, Buffer, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
-use crate::shapes::{BuiltShape, UBO, Vertex, Vertex2D};
+use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 use crate::pipelines::{self, CompletePipeline};
 
@@ -194,7 +194,7 @@ impl BezierPipeline {
     }
 
     /// Fills the index, vertex, and uniform buffers
-    pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[Vertex2D], indices: &[u32], mobjects: &[&Mobject]) {
+    pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[RenderVertex], indices: &[u32], mobjects: &[&Mobject]) {
         window::fill_vertex_buffer(device, self.vertex_buffer_memories[frame_index], vertices);
         window::fill_index_buffer(device, self.index_buffer_memories[frame_index], indices);
         mobjects
@@ -211,12 +211,12 @@ impl BezierPipeline {
     fn vertex_binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
-            stride: size_of::<Vertex2D>() as u32,
+            stride: size_of::<RenderVertex>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }
     }
 
     fn vertex_attribute_description() -> [VertexInputAttributeDescription; 4] {
-        Vertex2D::attribute_descriptions()
+        RenderVertex::attribute_descriptions()
     }
 }

@@ -67,7 +67,7 @@ macro_rules! define_shape {
         }
 
         impl BuiltShape for $name {
-            fn get_vertices(&self) -> &[Vertex2D] {
+            fn get_vertices(&self) -> &[RenderVertex] {
                 &self.vertices
             }
 
