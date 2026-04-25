@@ -110,6 +110,10 @@ macro_rules! define_shape {
                 &self.vertices
             }
 
+            fn get_mut_vertices(&mut self) -> &mut [Vertex2D] {
+                &mut self.vertices
+            }
+
             fn get_pipeline(&self) -> Pipelines {
                 self.pipeline
             }

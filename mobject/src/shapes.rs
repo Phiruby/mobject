@@ -161,6 +161,7 @@ pub trait ShapeConstruction {
     fn vertices2d(&self) -> &[Vertex2D] {
         self.get_vertices()
     }
+    fn get_mut_vertices(&mut self) -> &mut [Vertex2D];
     fn get_vertices(&self) -> &[Vertex2D];
     fn indices(&self) -> &[u32];
     fn vertices_and_indices(&self) -> (&[Vertex2D], &[u32]) {
