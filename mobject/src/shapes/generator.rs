@@ -139,7 +139,6 @@ macro_rules! define_shape {
                     )
                 );
                 for (i, v) in self.vertices.iter_mut().enumerate() {
-                    if (i >= 2) {continue;}
                     new_constraints.push(
                         crate::physics::constraints::PhysicsConstraint::Static(
                             crate::physics::constraints::StaticConstraint {
