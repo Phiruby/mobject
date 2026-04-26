@@ -32,6 +32,20 @@ pub struct StaticConstraint {
     pub pin_to: Vec3
 }
 
+/// Maintain constant distance to `attached_to`
+/// This was derived in Matthias' pbd paper
+pub struct DistanceConstraint<'a> {
+    pub inp_vertex_index: usize,
+    pub attached_to: &'a PhysicsVertex,
+    pub radius: f32
+}
+
+pub enum PhysicsConstraint {
+    Attachment(AttachmentConstraint<'static>),
+    Static(StaticConstraint),
+    Distance(DistanceConstraint<'static>)
+}
+
 impl Constraint for AttachmentConstraint<'_> {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
         (positions[self.inp_vertex_index]- self.attached_to.position).norm()
@@ -57,5 +71,38 @@ impl Constraint for StaticConstraint {
                 gradient: (positions[self.inp_vertex_index] - self.pin_to) * 2.0
             }
         ]
+    }
+}
+
+impl Constraint for DistanceConstraint<'_> {
+    fn evaluate(&self, positions: &[Vec3]) -> f32 {
+        nalgebra_glm::l1_distance(&positions[self.inp_vertex_index], &self.attached_to.position) - self.radius
+    }
+    fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
+        let dist = nalgebra_glm::l1_distance(&positions[self.inp_vertex_index], &self.attached_to.position);
+
+        vec![
+            ConstrainedGradient {
+                index: self.inp_vertex_index as usize,
+                gradient: (positions[self.inp_vertex_index] - self.attached_to.position) / dist
+            }
+        ]
+    }
+}
+
+impl Constraint for PhysicsConstraint {
+    fn evaluate(&self, positions: &[Vec3]) -> f32 {
+        match self {
+            PhysicsConstraint::Static(c) => c.evaluate(positions),
+            PhysicsConstraint::Distance(c) => c.evaluate(positions),
+            PhysicsConstraint::Attachment(c) => c.evaluate(positions),
+        }
+    }
+    fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
+        match self {
+            PhysicsConstraint::Static(c) => c.gradient(positions),
+            PhysicsConstraint::Distance(c) => c.gradient(positions),
+            PhysicsConstraint::Attachment(c) => c.gradient(positions),
+        }
     }
 }

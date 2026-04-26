@@ -15,7 +15,7 @@ use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::fmt::Debug;
 use std::{mem::offset_of, os::raw::c_void};
-use crate::physics::constraints::Constraint;
+use crate::physics::constraints::PhysicsConstraint;
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
@@ -56,7 +56,6 @@ pub struct PhysicsVertex {
     pub velocity: Vec3,
     // inverse of mass: 1/m
     pub w: f32,
-    pub constraints: Vec<Box<dyn Constraint>>
 }
 
 impl PhysicsVertex {
@@ -65,7 +64,6 @@ impl PhysicsVertex {
             position,
             velocity: Vec3::new(0.0, 0.0, 0.0),
             w: 1.0,
-            constraints: Vec::new()
         }
     }
 }
@@ -168,7 +166,7 @@ pub trait ShapeConstruction {
     fn vertices2d(&self) -> &[RenderVertex] {
         self.get_vertices()
     }
-    fn get_mut_vertices(&mut self) -> &mut [PhysicsVertex];
+    fn get_mut_vertices_and_constraints(&mut self) -> (&mut [crate::shapes::PhysicsVertex], &[crate::physics::constraints::PhysicsConstraint]);
     fn get_vertices(&self) -> &[RenderVertex];
     fn indices(&self) -> &[u32];
     fn vertices_and_indices(&self) -> (&[RenderVertex], &[u32]) {

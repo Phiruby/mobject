@@ -1,12 +1,12 @@
 use nalgebra_glm::{Vec3};
-use crate::physics::constraints::{Constraint};
+use crate::physics::constraints::{Constraint, PhysicsConstraint};
 use crate::{scene::Mobject};
 pub struct PBDSolver ();
 
 fn project_constraints(
     positions: &mut [Vec3],
     inv_masses: &[f32],
-    constraints: &[&dyn Constraint],
+    constraints: &[PhysicsConstraint],
 ) {
     for c in constraints {
         let ev = c.evaluate(positions);
@@ -29,7 +29,7 @@ impl PBDSolver {
             return;
         }
         for mobj in mobjects {
-            let vertices = mobj.get_mut_vertices();
+            let (vertices, constraints) = mobj.get_mut_vertices_and_constraints();
 
             vertices.iter_mut().for_each(|v| {
                 v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
@@ -38,13 +38,8 @@ impl PBDSolver {
             let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
             // TODO: collision constraints
             let inv_masses: Vec<f32> = vertices.iter().map(|v| v.w).collect();
-            let constraints: Vec<&dyn Constraint> = vertices
-                .iter()
-                .flat_map(|v| v.constraints.iter())
-                .map(|c| c.as_ref())
-                .collect();
 
-            project_constraints(&mut ps, &inv_masses, &constraints);
+            project_constraints(&mut ps, &inv_masses,constraints);
             for (v, p) in vertices.iter_mut().zip(ps.iter()) {
                 v.velocity = (p - v.position) / dt;
                 v.position = *p;

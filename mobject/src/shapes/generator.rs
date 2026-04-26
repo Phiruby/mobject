@@ -11,6 +11,7 @@ macro_rules! define_shape {
             pub vertices: $vty,
             pub indices:  $ity,
             pub physics_vertices: Vec<crate::shapes::PhysicsVertex>,
+            pub constraints: Vec<crate::physics::constraints::PhysicsConstraint>,
             texture_path: Option<String>,
             uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -28,6 +29,7 @@ macro_rules! define_shape {
                     uniform_buffers: None,
                     uniform_buffer_memories: None,
                     uniform_mapped_memories: None,
+                    constraints: Vec::new(),
                     ubo: UBO { model: glm::identity() },
                     texture_path: None,
                     pipeline: $pipeline
@@ -75,13 +77,9 @@ macro_rules! define_shape {
                 }
             }
 
-            pub fn with_constraints(self, constraints: Vec<Box<dyn crate::physics::constraints::Constraint>>) -> Self {
-                let mut pv = self.physics_vertices;
-                for (v, c) in pv.iter_mut().zip(constraints.into_iter()) {
-                    v.constraints.push(c);
-                }
+            pub fn with_constraints(self, constraints: Vec<crate::physics::constraints::PhysicsConstraint>) -> Self {
                 Self {
-                    physics_vertices: pv,
+                    constraints,
                     ..self
                 }
             }
@@ -106,20 +104,19 @@ macro_rules! define_shape {
             }
             // constraint generation
             pub fn make_static(self) -> Self {
-                let mut pv = self.physics_vertices;
-                for (i, v) in pv.iter_mut().enumerate() {
-                    v.constraints.clear();
-                    v.constraints.push(
-                        Box::new(
+                let mut new_constraints = Vec::new();
+                for (i, v) in self.vertices.iter().enumerate() {
+                    new_constraints.push(
+                        crate::physics::constraints::PhysicsConstraint::Static(
                             crate::physics::constraints::StaticConstraint {
                                 pin_to: v.position,
                                 inp_vertex_index: i
                             }
                         )
-                    );
+                    )
                 }
                 Self {
-                    physics_vertices: pv,
+                    constraints: new_constraints,
                     ..self
                 }
             }
@@ -156,8 +153,8 @@ macro_rules! define_shape {
                 &self.vertices
             }
 
-            fn get_mut_vertices(&mut self) -> &mut [crate::shapes::PhysicsVertex] {
-                &mut self.physics_vertices
+            fn get_mut_vertices_and_constraints(&mut self) -> (&mut [crate::shapes::PhysicsVertex], &[crate::physics::constraints::PhysicsConstraint]) {
+                (&mut self.physics_vertices, &self.constraints)
             }
 
             fn get_pipeline(&self) -> Pipelines {
