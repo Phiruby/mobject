@@ -68,6 +68,11 @@ impl PBDSolver {
         }
         for mobj in mobjects {
             let vertices = mobj.get_mut_vertices();
+
+            vertices.iter_mut().for_each(|v| {
+                v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
+            });
+
             let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
             // TODO: collision constraints
             let inv_masses: Vec<f32> = vertices.iter().map(|v| v.w).collect();
