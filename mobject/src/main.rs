@@ -1,6 +1,6 @@
 use mobject::Scene;
 // use mobject::shapes::surface::Surface3D;
-use mobject::shapes::{ObjModel, Points, Rectangle};
+use mobject::shapes::{ObjModel, Points, Rectangle, Cube};
 use nalgebra_glm as glm;
 use nalgebra_glm::{Mat4, Vec3};
 use mobject::physics::constraints::StaticConstraint;
@@ -8,12 +8,16 @@ use mobject::physics::constraints::StaticConstraint;
 
 fn main() {
     let rect = Box::new(
-        Rectangle::default()
+        Cube::default()
         .with_velocities(vec![
-            Vec3::new(1.2, 0.0, 0.0),
-            Vec3::new(1.2, 0.0, 0.0),
-            Vec3::new(1.2, 0.0, 0.0),
-            Vec3::new(1.2, 0.0, 0.0)
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
         ])
         .make_static()
     );

@@ -40,10 +40,13 @@ pub struct DistanceConstraint<'a> {
     pub radius: f32
 }
 
+pub struct ShapeConstraint();
+
 pub enum PhysicsConstraint {
     Attachment(AttachmentConstraint<'static>),
     Static(StaticConstraint),
-    Distance(DistanceConstraint<'static>)
+    Distance(DistanceConstraint<'static>),
+    RigidBody(ShapeConstraint)
 }
 
 impl Constraint for AttachmentConstraint<'_> {
@@ -96,6 +99,7 @@ impl Constraint for PhysicsConstraint {
             PhysicsConstraint::Static(c) => c.evaluate(positions),
             PhysicsConstraint::Distance(c) => c.evaluate(positions),
             PhysicsConstraint::Attachment(c) => c.evaluate(positions),
+            PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have an evaluate function")
         }
     }
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
@@ -103,6 +107,7 @@ impl Constraint for PhysicsConstraint {
             PhysicsConstraint::Static(c) => c.gradient(positions),
             PhysicsConstraint::Distance(c) => c.gradient(positions),
             PhysicsConstraint::Attachment(c) => c.gradient(positions),
+            PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have a gradient function")
         }
     }
 }

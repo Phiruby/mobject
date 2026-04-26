@@ -17,6 +17,16 @@ define_shape!(
     },
     Pipelines::Primitive
 );
+
+define_shape!(
+    pub struct Cube {
+        vertices: Vec<RenderVertex>,
+        indices: Vec<u32>,
+    },
+    Pipelines::Primitive
+);
+
+
 impl Default for Triangle {
     fn default() -> Self {
         let positions = vec![
@@ -90,6 +100,7 @@ define_shape!(
     },
     Pipelines::Primitive
 );
+
 impl Rectangle {
     pub fn load(vertices: [RenderVertex; 4]) -> Self {
         Self::new().with_indices(vec![0, 1, 2, 2, 3, 0]).with_vertices(vertices.to_vec())
@@ -121,5 +132,55 @@ impl Default for Rectangle {
             .collect();
 
         Self::load(vertices.try_into().unwrap())
+    }
+}
+
+impl Default for Cube {
+    fn default() -> Self {
+        let positions = vec![
+            Vec3::new(-0.25, -0.25,  0.25),
+            Vec3::new( 0.25, -0.25,  0.25),
+            Vec3::new( 0.25,  0.25,  0.25),
+            Vec3::new(-0.25,  0.25,  0.25),
+
+            Vec3::new(-0.25, -0.25, -0.25),
+            Vec3::new( 0.25, -0.25, -0.25),
+            Vec3::new( 0.25,  0.25, -0.25),
+            Vec3::new(-0.25,  0.25, -0.25),
+        ];
+
+        let indices: Vec<usize> = vec![
+            // Front
+            0, 1, 2, 2, 3, 0,
+            // Back
+            5, 4, 7, 7, 6, 5,
+            // Left
+            4, 0, 3, 3, 7, 4,
+            // Right
+            1, 5, 6, 6, 2, 1,
+            // Top
+            3, 2, 6, 6, 7, 3,
+            // Bottom
+            4, 5, 1, 1, 0, 4,
+        ];
+
+        let normals = shapes::compute_normals(&indices, &positions);
+
+        let vertices: Vec<RenderVertex> = positions
+            .into_iter()
+            .zip(normals.into_iter())
+            .map(|(pos, norm)| {
+                RenderVertex::new(
+                    pos,
+                    Vec3::new(1.0, 0.0, 0.0), // color
+                    norm,
+                    None,
+                )
+            })
+            .collect();
+        let u32_indices = indices.iter().map(|&x| x as u32).collect();
+        Self::new()
+            .with_vertices(vertices)
+            .with_indices(u32_indices)
     }
 }

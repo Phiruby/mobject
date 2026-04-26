@@ -56,6 +56,9 @@ pub struct PhysicsVertex {
     pub velocity: Vec3,
     // inverse of mass: 1/m
     pub w: f32,
+    // relevant for rigid bodies only. depends on obj's COM to get
+    // world space.
+    pub body_space_position: Vec3,
 }
 
 impl PhysicsVertex {
@@ -64,6 +67,13 @@ impl PhysicsVertex {
             position,
             velocity: Vec3::new(0.0, 0.0, 0.0),
             w: 1.0,
+            body_space_position: Vec3::new(0.0, 0.0, 0.0),
+        }
+    }
+    pub fn with_body_space_position(self, body_position: Vec3) -> Self {
+        Self {
+            body_space_position: body_position,
+            ..self
         }
     }
 }
@@ -181,6 +191,7 @@ pub trait ShapeConstruction {
     );
     fn texture_path(&self) -> Option<&str>;
     fn sync_phys_and_render_vertices(&mut self);
+    fn set_com(&mut self, com: Vec3);
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}

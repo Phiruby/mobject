@@ -12,6 +12,7 @@ macro_rules! define_shape {
             pub indices:  $ity,
             pub physics_vertices: Vec<crate::shapes::PhysicsVertex>,
             pub constraints: Vec<crate::physics::constraints::PhysicsConstraint>,
+            com: Vec3,
             texture_path: Option<String>,
             uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
@@ -32,7 +33,8 @@ macro_rules! define_shape {
                     constraints: Vec::new(),
                     ubo: UBO { model: glm::identity() },
                     texture_path: None,
-                    pipeline: $pipeline
+                    pipeline: $pipeline,
+                    com: glm::vec3(0.0, 0.0, 0.0),
                 }
             }
 
@@ -58,10 +60,24 @@ macro_rules! define_shape {
             }
 
             pub fn with_vertices(self, vertices: $vty) -> Self {
-                let physics_vertices = vertices.iter().map(|v| crate::shapes::PhysicsVertex::new(v.position)).collect();
+                let physics_vertices: Vec<crate::shapes::PhysicsVertex> = vertices.iter().map(|v| crate::shapes::PhysicsVertex::new(v.position)).collect();
+                // TODO: initial center of mass different from next
+                // iteration's computation (if you add constraints)
+                // fix this up!
+                // dbg!(&vertices);
+                let com = crate::physics::center_of_mass(&physics_vertices);
+                // dbg!(com);
+                let physics_vertices = physics_vertices
+                    .into_iter()
+                    .map(|v| {
+                        let pos = v.position.clone();
+                        v.with_body_space_position(pos - com)
+                    })
+                    .collect();
                 Self {
                     vertices,
                     physics_vertices,
+                    com,
                     ..self
                 }
             }
@@ -78,8 +94,20 @@ macro_rules! define_shape {
             }
 
             pub fn with_constraints(self, constraints: Vec<crate::physics::constraints::PhysicsConstraint>) -> Self {
+                // TODO: static / attachment constraints should get infinite mass
                 Self {
                     constraints,
+                    ..self
+                }
+            }
+
+            pub fn with_inverse_mass(self, inv_masses: Vec<f32>) -> Self {
+                let mut pv = self.physics_vertices;
+                for (v, m) in pv.iter_mut().zip(inv_masses.iter()) {
+                    v.w = *m;
+                }
+                Self {
+                    physics_vertices: pv,
                     ..self
                 }
             }
@@ -103,9 +131,15 @@ macro_rules! define_shape {
                 }
             }
             // constraint generation
-            pub fn make_static(self) -> Self {
+            pub fn make_static(mut self) -> Self {
                 let mut new_constraints = Vec::new();
-                for (i, v) in self.vertices.iter().enumerate() {
+                new_constraints.push(
+                    crate::physics::constraints::PhysicsConstraint::RigidBody(
+                        crate::physics::constraints::ShapeConstraint()
+                    )
+                );
+                for (i, v) in self.vertices.iter_mut().enumerate() {
+                    if (i >= 2) {continue;}
                     new_constraints.push(
                         crate::physics::constraints::PhysicsConstraint::Static(
                             crate::physics::constraints::StaticConstraint {
@@ -113,10 +147,15 @@ macro_rules! define_shape {
                                 inp_vertex_index: i
                             }
                         )
-                    )
+                    );
+                    self.physics_vertices[i].w = 0.0;
                 }
+                let cm = crate::physics::center_of_mass(&self.physics_vertices);
+                let old_cm = self.com;
+                self.physics_vertices.iter_mut().for_each(|v| v.body_space_position += old_cm - cm);
                 Self {
                     constraints: new_constraints,
+                    com: cm,
                     ..self
                 }
             }
@@ -189,6 +228,9 @@ macro_rules! define_shape {
                         // TODO: also compute new normal
                         v.position = pv.position;
                     });
+            }
+            fn set_com(&mut self, com: Vec3) {
+                self.com = com
             }
         }
         impl crate::shapes::ShapeMotion for $name {
