@@ -39,7 +39,7 @@ impl Default for Triangle {
             })
             .collect();
 
-        Self::new(vertices)
+        Self::new().with_vertices(vertices)
     }
 }
 
@@ -79,20 +79,20 @@ impl ObjModel {
             .collect();
 
         let indices = model.indices;
-        Self::with_indices(vertices, indices)
+        Self::new().with_indices(indices).with_vertices(vertices)
     }
 }
 
 define_shape!(
     pub struct Rectangle {
-        vertices: [RenderVertex; 4],
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
 );
 impl Rectangle {
     pub fn load(vertices: [RenderVertex; 4]) -> Self {
-        Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
+        Self::new().with_indices(vec![0, 1, 2, 2, 3, 0]).with_vertices(vertices.to_vec())
     }
 }
 

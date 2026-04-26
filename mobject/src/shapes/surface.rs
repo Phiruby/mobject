@@ -56,6 +56,6 @@ impl Default for Points {
                 )
             })
             .collect();
-        Self::new(vertices)
+        Self::new().with_vertices(vertices)
     }
 }

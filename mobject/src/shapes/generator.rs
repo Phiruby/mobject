@@ -154,6 +154,15 @@ macro_rules! define_shape {
             fn texture_path(&self) -> Option<&str> {
                 self.texture_path.as_deref()
             }
+            fn sync_phys_and_render_vertices(&mut self) {
+                self.vertices
+                    .iter_mut()
+                    .zip(self.physics_vertices.iter())
+                    .for_each(|(v, pv)| {
+                        // TODO: also compute new normal
+                        v.position = pv.position;
+                    });
+            }
         }
         impl crate::shapes::ShapeMotion for $name {
             fn rotate(&mut self, axis: &glm::Vec3, angle: f32) {

@@ -182,6 +182,7 @@ pub trait ShapeConstruction {
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
     fn texture_path(&self) -> Option<&str>;
+    fn sync_phys_and_render_vertices(&mut self);
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}

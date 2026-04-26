@@ -1,7 +1,7 @@
 use nalgebra_glm::{Mat3x3, Vec3, Quat};
 
-use crate::shapes::{BuiltShape, PhysicsVertex};
-struct PBDSolver ();
+use crate::{scene::Mobject, shapes::{BuiltShape, PhysicsVertex}};
+pub struct PBDSolver ();
 
 struct ConstrainedGradient {
     index: usize,
@@ -61,8 +61,11 @@ fn project_constraints(
 }
 
 impl PBDSolver {
-    pub fn update(&mut self, mobjects: &mut [Box<dyn BuiltShape>], dt: f32) {
+    pub fn update(&mut self, mobjects: &mut [Mobject], dt: f32) {
         // TODO: external forces
+        if mobjects.len() == 0 {
+            return;
+        }
         for mobj in mobjects {
             let vertices = mobj.get_mut_vertices();
             let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();

@@ -14,6 +14,7 @@ use std::ops::{Deref, DerefMut};
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::shapes::animations::AnimationProxy;
+use crate::physics::pbd::PBDSolver;
 pub type MobjectId = u32;
 use crate::MAX_FRAMES_IN_FLIGHT;
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
@@ -66,7 +67,7 @@ pub struct Texture {
 
 pub struct Mobject {
     pub id: MobjectId,
-    mobject: Box<dyn BuiltShape>,
+    pub mobject: Box<dyn BuiltShape>,
     descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
 }
 impl Mobject {
@@ -119,7 +120,9 @@ pub struct Scene {
     bezier_pipeline: BezierPipeline,
     graphics_queue: Queue,
     cmd_pool: CommandPool,
-    framebuffers: Vec<Framebuffer>
+    framebuffers: Vec<Framebuffer>,
+
+    solver: PBDSolver
 }
 
 impl Scene {
@@ -306,7 +309,9 @@ impl Scene {
             bezier_pipeline,
             graphics_queue,
             cmd_pool: pool,
-            framebuffers
+            framebuffers,
+
+            solver: PBDSolver()
         }
     }
 
@@ -441,6 +446,10 @@ impl Scene {
                 self.take_action();
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
+
+            self.solver.update(&mut self.mobjects, 0.01);
+            self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(); });
+
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
             if let SceneState::Waiting { from, duration } = self.state {
                 let elapsed = from.elapsed();
