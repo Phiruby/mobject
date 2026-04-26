@@ -158,6 +158,40 @@ macro_rules! define_shape {
                     ..self
                 }
             }
+            /// Pins the vertices indexed by `indices`
+            pub fn anchor(mut self, indices: Vec<usize>) -> Self {
+                for i in indices {
+                    self.constraints.push(
+                        crate::physics::constraints::PhysicsConstraint::Static(
+                            crate::physics::constraints::StaticConstraint {
+                                pin_to: self.vertices[i].position,
+                                inp_vertex_index: i
+                            }
+                        )
+                    );
+                    self.physics_vertices[i].w = 0.0;
+                }
+                let cm = crate::physics::center_of_mass(&self.physics_vertices);
+                let old_cm = self.com;
+                self.physics_vertices.iter_mut().for_each(|v| v.body_space_position += old_cm - cm);
+                Self {
+                    constraints: self.constraints,
+                    com: cm,
+                    ..self
+                }
+            }
+            /// Turns the obj into a rigid body: meaning distances
+            /// between vertices are preserved. If you anchor a few vertices
+            /// without calling `rigid_body`, you'll notice the object
+            /// "drop and expand" due to gravity
+            pub fn rigid_body(mut self) -> Self {
+                self.constraints.push(
+                    crate::physics::constraints::PhysicsConstraint::RigidBody(
+                        crate::physics::constraints::ShapeConstraint()
+                    )
+                );
+                self
+            }
         }
 
         impl Shape for $name {

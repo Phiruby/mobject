@@ -19,7 +19,9 @@ fn main() {
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(0.0, 0.0, 0.0),
         ])
-        .make_static()
+        // .make_static()
+        .anchor(vec![0, 1])
+        .rigid_body()
     );
     let mut scene = Scene::new();
     scene.wait(5);
