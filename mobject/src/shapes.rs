@@ -15,7 +15,7 @@ use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::fmt::Debug;
 use std::{mem::offset_of, os::raw::c_void};
-use crate::physics::pbd::Constraint;
+use crate::physics::constraints::Constraint;
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};

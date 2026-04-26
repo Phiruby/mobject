@@ -75,6 +75,17 @@ macro_rules! define_shape {
                 }
             }
 
+            pub fn with_constraints(self, constraints: Vec<Box<dyn crate::physics::constraints::Constraint>>) -> Self {
+                let mut pv = self.physics_vertices;
+                for (v, c) in pv.iter_mut().zip(constraints.into_iter()) {
+                    v.constraints.push(c);
+                }
+                Self {
+                    physics_vertices: pv,
+                    ..self
+                }
+            }
+
             pub fn include_texture(self, texture_path: &str) -> Self {
                 Self {
                     texture_path: Some(String::from(texture_path)),
@@ -90,6 +101,25 @@ macro_rules! define_shape {
                     .collect::<Vec<RenderVertex>>()
                     .try_into()
                     .unwrap(),
+                    ..self
+                }
+            }
+            // constraint generation
+            pub fn make_static(self) -> Self {
+                let mut pv = self.physics_vertices;
+                for (i, v) in pv.iter_mut().enumerate() {
+                    v.constraints.clear();
+                    v.constraints.push(
+                        Box::new(
+                            crate::physics::constraints::StaticConstraint {
+                                pin_to: v.position,
+                                inp_vertex_index: i
+                            }
+                        )
+                    );
+                }
+                Self {
+                    physics_vertices: pv,
                     ..self
                 }
             }

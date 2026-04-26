@@ -3,6 +3,7 @@ use mobject::Scene;
 use mobject::shapes::{ObjModel, Points, Rectangle};
 use nalgebra_glm as glm;
 use nalgebra_glm::{Mat4, Vec3};
+use mobject::physics::constraints::StaticConstraint;
 
 
 fn main() {
@@ -14,6 +15,7 @@ fn main() {
             Vec3::new(1.2, 0.0, 0.0),
             Vec3::new(1.2, 0.0, 0.0)
         ])
+        .make_static()
     );
     let mut scene = Scene::new();
     scene.wait(5);
