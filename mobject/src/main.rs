@@ -1,9 +1,9 @@
 use mobject::Scene;
 // use mobject::shapes::surface::Surface3D;
-use mobject::shapes::{ObjModel, Points, Rectangle, Cube};
+use mobject::shapes::{ObjModel, Points, Rectangle, Cube, objects::Cloth};
 use nalgebra_glm as glm;
 use nalgebra_glm::{Mat4, Vec3};
-use mobject::physics::constraints::StaticConstraint;
+use mobject::physics::constraints::{PhysicsConstraint, StaticConstraint, StretchConstraint};
 
 
 fn main() {
@@ -23,8 +23,11 @@ fn main() {
         .anchor(vec![0, 1])
         .rigid_body()
     );
+    let c = Box::new(Cloth::default().anchor(vec![0, 9, 90, 99]));
     let mut scene = Scene::new();
-    scene.wait(5);
+    scene.wait(3);
+    scene.add(c);
+    scene.wait(3);
     scene.add(rect);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
 

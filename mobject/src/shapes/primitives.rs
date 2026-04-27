@@ -26,6 +26,13 @@ define_shape!(
     Pipelines::Primitive
 );
 
+define_shape!(
+    pub struct Cloth {
+        vertices: Vec<RenderVertex>,
+        indices: Vec<u32>,
+    },
+    Pipelines::Primitive
+);
 
 impl Default for Triangle {
     fn default() -> Self {
@@ -108,6 +115,7 @@ impl Rectangle {
 }
 
 impl Default for Rectangle {
+
     fn default() -> Self {
 
         let positions = vec![

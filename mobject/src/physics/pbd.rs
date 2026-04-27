@@ -70,9 +70,9 @@ fn project_constraints(
         if ev.abs() <= f32::EPSILON {
             continue;
         }
-        let denom = c.scale_factor(world_positions, inv_masses);
-        let s = ev / denom;
         let grads = c.gradient(world_positions);
+        let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm());
+        let s = ev / denom;
         for g in grads {
             world_positions[g.index] -= g.gradient * s * inv_masses[g.index];
         }
