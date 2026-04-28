@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::ptr::copy_nonoverlapping;
 
-use crate::shapes::Vertex2D;
+use crate::shapes::RenderVertex;
 use crate::MAX_FRAMES_IN_FLIGHT;
 use ash::vk::{
     DeviceMemory,
@@ -61,11 +61,11 @@ pub fn create_sync_objects(device: &Device) -> Vec<Sync> {
         .collect()
 }
 
-pub fn fill_vertex_buffer(device: &Device, memory: DeviceMemory, vertices: &[Vertex2D]) {
+pub fn fill_vertex_buffer(device: &Device, memory: DeviceMemory, vertices: &[RenderVertex]) {
     let memory_loc =
         unsafe { device.map_memory(memory, 0, vk::WHOLE_SIZE, MemoryMapFlags::empty()) }.unwrap();
     unsafe {
-        let dst = memory_loc as *mut Vertex2D;
+        let dst = memory_loc as *mut RenderVertex;
         copy_nonoverlapping(vertices.as_ptr(), dst, vertices.len());
         device.unmap_memory(memory);
     }

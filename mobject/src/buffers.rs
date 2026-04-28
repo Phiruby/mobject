@@ -2,7 +2,7 @@ use std::array;
 use std::ffi::c_void;
 
 use crate::device::QueueFamilies;
-use crate::shapes::Vertex2D;
+use crate::shapes::RenderVertex;
 use crate::{MAX_FRAMES_IN_FLIGHT, swapchain, texture};
 use ash::vk::{
     self, Buffer, BufferCreateInfo, BufferUsageFlags, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandPool,
@@ -108,7 +108,7 @@ pub fn create_vertex_buffers(
     let entities: [(Buffer, DeviceMemory); MAX_FRAMES_IN_FLIGHT as usize] = array::from_fn(|_| {
             create_buffer(
                 device,
-                (size_of::<Vertex2D>() * num_vertices_upper_bound) as u64,
+                (size_of::<RenderVertex>() * num_vertices_upper_bound) as u64,
                 BufferUsageFlags::VERTEX_BUFFER,
                 memory_proprties,
             )

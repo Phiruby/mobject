@@ -2,7 +2,9 @@ pub mod surface;
 pub mod primitives;
 pub mod generator;
 pub mod animations;
+pub mod objects;
 pub use primitives::*;
+pub use objects::*;
 pub use animations::*;
 
 pub use surface::Points;
@@ -13,7 +15,9 @@ use ash::vk::{
 };
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
+use std::fmt::Debug;
 use std::{mem::offset_of, os::raw::c_void};
+use crate::physics::constraints::PhysicsConstraint;
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
@@ -38,13 +42,42 @@ pub trait Vertex<const N: usize> {
     fn binding_description() -> VertexInputBindingDescription;
 }
 
+// TODO: all fields in this struct will be sent to GPU!
+// will need to drop / convert to `GraphicsVertex`
 #[repr(C)]
-#[derive(Clone, Debug)]
-pub struct Vertex2D {
+#[derive(Debug, Clone)]
+pub struct RenderVertex {
     pub position: Vec3,
     pub color: Vec3,
     pub normal: Vec3,
     pub tex_coord: Vec2,
+}
+#[derive(Debug)]
+pub struct PhysicsVertex {
+    pub position: Vec3,
+    pub velocity: Vec3,
+    // inverse of mass: 1/m
+    pub w: f32,
+    // relevant for rigid bodies only. depends on obj's COM to get
+    // world space.
+    pub body_space_position: Vec3,
+}
+
+impl PhysicsVertex {
+    pub fn new(position: Vec3) -> Self {
+        Self {
+            position,
+            velocity: Vec3::new(0.0, 0.0, 0.0),
+            w: 1.0,
+            body_space_position: Vec3::new(0.0, 0.0, 0.0),
+        }
+    }
+    pub fn with_body_space_position(self, body_position: Vec3) -> Self {
+        Self {
+            body_space_position: body_position,
+            ..self
+        }
+    }
 }
 
 pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec3> {
@@ -69,7 +102,7 @@ pub fn compute_normals(indices: &[usize], vertices_position: &[Vec3]) -> Vec<Vec
     normals
 }
 
-impl Vertex2D {
+impl RenderVertex {
     pub fn new(position: Vec3, color: Vec3, normal: Vec3, tex_coord: Option<Vec2>) -> Self {
         Self {
             position,
@@ -83,7 +116,7 @@ impl Vertex2D {
             position,
             normal,
             color: Vec3::new(1.0, 1.0, 1.0),
-            tex_coord
+            tex_coord,
         }
     }
     pub fn update_tex_coord(self, c: Vec2) -> Self {
@@ -91,16 +124,16 @@ impl Vertex2D {
             position: self.position,
             color: self.color,
             normal: self.normal,
-            tex_coord: c
+            tex_coord: c,
         }
     }
 }
 
-impl Vertex<4> for Vertex2D {
+impl Vertex<4> for RenderVertex {
     fn binding_description() -> VertexInputBindingDescription {
         VertexInputBindingDescription {
             binding: 0,
-            stride: size_of::<Vertex2D>() as u32,
+            stride: size_of::<RenderVertex>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }
     }
@@ -111,25 +144,25 @@ impl Vertex<4> for Vertex2D {
                 binding: 0,
                 location: 0,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, position) as u32,
+                offset: offset_of!(RenderVertex, position) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 1,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, color) as u32,
+                offset: offset_of!(RenderVertex, color) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
                 format: vk::Format::R32G32B32_SFLOAT,
-                offset: offset_of!(Vertex2D, normal) as u32,
+                offset: offset_of!(RenderVertex, normal) as u32,
             },
             VertexInputAttributeDescription {
                 binding: 0,
                 location: 3,
                 format: vk::Format::R32G32_SFLOAT,
-                offset: offset_of!(Vertex2D, tex_coord) as u32
+                offset: offset_of!(RenderVertex, tex_coord) as u32
             }
         ]
     }
@@ -142,12 +175,13 @@ pub trait ShapeMotion {
 
 pub trait ShapeConstruction {
     fn get_pipeline(&self) -> Pipelines;
-    fn vertices2d(&self) -> &[Vertex2D] {
+    fn vertices2d(&self) -> &[RenderVertex] {
         self.get_vertices()
     }
-    fn get_vertices(&self) -> &[Vertex2D];
+    fn get_mut_vertices_and_constraints(&mut self) -> (&mut [crate::shapes::PhysicsVertex], &[crate::physics::constraints::PhysicsConstraint]);
+    fn get_vertices(&self) -> &[RenderVertex];
     fn indices(&self) -> &[u32];
-    fn vertices_and_indices(&self) -> (&[Vertex2D], &[u32]) {
+    fn vertices_and_indices(&self) -> (&[RenderVertex], &[u32]) {
         (self.get_vertices(), self.indices())
     }
     fn get_uniform_buffer(
@@ -158,6 +192,10 @@ pub trait ShapeConstruction {
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
     fn texture_path(&self) -> Option<&str>;
+    fn sync_phys_and_render_vertices(&mut self);
+    fn set_com(&mut self, com: Vec3);
+    fn get_physics_vertices(&self) -> &[crate::shapes::PhysicsVertex];
+    fn update_spatial_hash(&self, space: &mut shapeject::SpatialHash3D<Vec<(u32, usize)>>, mid: u32);
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}
@@ -173,8 +211,8 @@ pub trait Shape {
 
 pub fn mobjects_to_vertices_and_indices(
     mobjects: &[&Mobject],
-) -> (Vec<Vertex2D>, Vec<u32>) {
-    let mut vertices: Vec<Vertex2D> = Vec::new();
+) -> (Vec<RenderVertex>, Vec<u32>) {
+    let mut vertices: Vec<RenderVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     for i in 0..mobjects.len()  {
         let current_length = vertices.len() as u32;

@@ -5,12 +5,12 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::{os::raw::c_void};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}, pipelines::Pipelines};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}, pipelines::Pipelines};
 use crate::{define_shape, shapes};
 
 define_shape!(
     pub struct Points {
-        vertices: Vec<Vertex2D>,
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Bezier
@@ -38,7 +38,7 @@ impl Default for Points {
             4, 5, 7,  5, 8, 7,
         ];
         let normals = shapes::compute_normals(&indices, &positions);
-        let vertices: Vec<Vertex2D> = positions
+        let vertices: Vec<RenderVertex> = positions
             .into_iter()
             .zip(normals.into_iter())
             .enumerate()
@@ -48,7 +48,7 @@ impl Default for Points {
                     (i / 3) as f32 / 2.0,
                 );
 
-                Vertex2D::new(
+                RenderVertex::new(
                     pos,
                     glm::make_vec3(&[0.0, 1.0, 0.0]),
                     normal,
@@ -56,6 +56,6 @@ impl Default for Points {
                 )
             })
             .collect();
-        Self::new(vertices)
+        Self::new().with_vertices(vertices)
     }
 }

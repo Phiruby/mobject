@@ -7,16 +7,33 @@ use nalgebra_glm::Vec3;
 use obj::{Obj, TexturedVertex, load_obj};
 use std::{os::raw::c_void};
 
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{Vertex2D, UBO, Shape, BuiltShape}};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
 define_shape!(
     pub struct Triangle {
-        vertices: Vec<Vertex2D>,
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
 );
+
+define_shape!(
+    pub struct Cube {
+        vertices: Vec<RenderVertex>,
+        indices: Vec<u32>,
+    },
+    Pipelines::Primitive
+);
+
+define_shape!(
+    pub struct Cloth {
+        vertices: Vec<RenderVertex>,
+        indices: Vec<u32>,
+    },
+    Pipelines::Primitive
+);
+
 impl Default for Triangle {
     fn default() -> Self {
         let positions = vec![
@@ -35,17 +52,17 @@ impl Default for Triangle {
             .zip(normals.into_iter())
             .zip(colors.into_iter())
             .map(|((pos, norm), col)| {
-                Vertex2D::new(pos, col, norm, None)
+                RenderVertex::new(pos, col, norm, None)
             })
             .collect();
 
-        Self::new(vertices)
+        Self::new().with_vertices(vertices).with_indices(vec![0, 1, 2])
     }
 }
 
 define_shape!(
     pub struct ObjModel {
-        vertices: Vec<Vertex2D>,
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
@@ -64,11 +81,11 @@ impl ObjModel {
             })
             .collect();
 
-        let vertices: Vec<Vertex2D> = model.vertices
+        let vertices: Vec<RenderVertex> = model.vertices
             .iter()
             .zip(positions.into_iter())
             .map(|(vert, pos)| {
-                    Vertex2D::new(
+                    RenderVertex::new(
                         pos,
                         glm::make_vec3(&[0.0, 0.0, 0.0]),
                         glm::make_vec3(&vert.normal),
@@ -79,24 +96,26 @@ impl ObjModel {
             .collect();
 
         let indices = model.indices;
-        Self::with_indices(vertices, indices)
+        Self::new().with_indices(indices).with_vertices(vertices)
     }
 }
 
 define_shape!(
     pub struct Rectangle {
-        vertices: [Vertex2D; 4],
+        vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
     Pipelines::Primitive
 );
+
 impl Rectangle {
-    pub fn load(vertices: [Vertex2D; 4]) -> Self {
-        Self::with_indices(vertices, vec![0, 1, 2, 2, 3, 0])
+    pub fn load(vertices: [RenderVertex; 4]) -> Self {
+        Self::new().with_indices(vec![0, 1, 2, 2, 3, 0]).with_vertices(vertices.to_vec())
     }
 }
 
 impl Default for Rectangle {
+
     fn default() -> Self {
 
         let positions = vec![
@@ -107,11 +126,11 @@ impl Default for Rectangle {
         ];
         let normals = shapes::compute_normals(&[0, 1, 2, 2, 3, 0], &positions);
 
-        let vertices: Vec<Vertex2D> = positions
+        let vertices: Vec<RenderVertex> = positions
             .into_iter()
             .zip(normals.into_iter())
             .map(|(pos, norm)|
-                Vertex2D::new(
+                RenderVertex::new(
                     pos,
                     Vec3::new(1.0, 0.0, 0.0),
                     -norm,
@@ -122,4 +141,114 @@ impl Default for Rectangle {
 
         Self::load(vertices.try_into().unwrap())
     }
+}
+
+impl Default for Cube {
+    fn default() -> Self {
+        let positions = vec![
+            Vec3::new(-0.25, -0.25,  1.75),
+            Vec3::new( 0.25, -0.25,  1.75),
+            Vec3::new( 0.25,  0.25,  1.75),
+            Vec3::new(-0.25,  0.25,  1.75),
+
+            Vec3::new(-0.25, -0.25, 1.5),
+            Vec3::new( 0.25, -0.25, 1.5),
+            Vec3::new( 0.25,  0.25, 1.5),
+            Vec3::new(-0.25,  0.25, 1.5),
+        ];
+
+        let indices: Vec<usize> = vec![
+            // Front
+            0, 1, 2, 2, 3, 0,
+            // Back
+            5, 4, 7, 7, 6, 5,
+            // Left
+            4, 0, 3, 3, 7, 4,
+            // Right
+            1, 5, 6, 6, 2, 1,
+            // Top
+            3, 2, 6, 6, 7, 3,
+            // Bottom
+            4, 5, 1, 1, 0, 4,
+        ];
+
+        let normals = shapes::compute_normals(&indices, &positions);
+
+        let vertices: Vec<RenderVertex> = positions
+            .into_iter()
+            .zip(normals.into_iter())
+            .map(|(pos, norm)| {
+                RenderVertex::new(
+                    pos,
+                    Vec3::new(1.0, 0.0, 0.0), // color
+                    norm,
+                    None,
+                )
+            })
+            .collect();
+        let u32_indices = indices.iter().map(|&x| x as u32).collect();
+        Self::new()
+            .with_vertices(vertices)
+            .with_indices(u32_indices)
+    }
+}
+
+pub fn create_baseplate() -> Box<dyn Shape> {
+    let width = 5.0;
+    let depth = 0.1;
+    let height = 5.0;
+
+    let hw = width / 2.0;
+    let hd = depth / 2.0;
+    let h  = height / 2.0;
+
+    let positions = vec![
+        Vec3::new(-hw,  h, -hd),
+        Vec3::new( hw,  h, -hd),
+        Vec3::new( hw,  h,  hd),
+        Vec3::new(-hw,  h,  hd),
+
+        Vec3::new(-hw, -h, -hd),
+        Vec3::new( hw, -h, -hd),
+        Vec3::new( hw, -h,  hd),
+        Vec3::new(-hw, -h,  hd),
+    ];
+
+    let indices: Vec<u32> = vec![
+        // Top
+        0, 1, 2, 2, 3, 0,
+        // Bottom
+        5, 4, 7, 7, 6, 5,
+        // Left
+        4, 0, 3, 3, 7, 4,
+        // Right
+        1, 5, 6, 6, 2, 1,
+        // Front
+        4, 5, 1, 1, 0, 4,
+        // Back
+        3, 2, 6, 6, 7, 3,
+    ];
+
+    let normals = shapes::compute_normals(&indices.iter().map(|&i| i as usize).collect::<Vec<_>>(), &positions);
+
+    let vertices: Vec<RenderVertex> = positions
+        .into_iter()
+        .zip(normals.into_iter())
+        .map(|(pos, norm)| {
+            RenderVertex::new(
+                pos,
+                Vec3::new(0.6, 0.6, 0.6), // neutral baseplate color
+                norm,
+                None,
+            )
+        })
+        .collect();
+
+    let b: Box<dyn Shape> = Box::new(
+        Cube::new()
+            .with_vertices(vertices)
+            .with_indices(indices)
+            .make_static()
+    );
+    b
 }
