@@ -7,7 +7,7 @@ use crate::device::QueueFamilies;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
-use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape, primitives};
 use std::collections::{HashMap, VecDeque};
 use cgmath::Vector3;
 use std::ffi::{CString, c_void};
@@ -323,6 +323,10 @@ impl Scene {
         }
     }
 
+    pub fn add_baseplate(&mut self) {
+        self.add(primitives::create_baseplate());
+    }
+
     fn add_texture_to_scene(&self, _image: Image, _memory: DeviceMemory, _mip_levels: u32, image_view: ImageView) {
         self.scene_descriptor_sets
             .iter()
@@ -455,7 +459,7 @@ impl Scene {
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
 
-            self.solver.update(&mut self.mobjects, &mut self.spatial_hash, 0.01);
+            self.solver.update(&mut self.mobjects, &mut self.spatial_hash, 0.002);
             self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(); });
 
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);

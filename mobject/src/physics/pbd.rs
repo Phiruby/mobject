@@ -83,10 +83,7 @@ fn project_constraints(
         let grads = c.gradient(world_positions);
         let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm());
         let s = ev / denom;
-        if s.is_nan() {
-            dbg!("Ooof");
-        }
-        for g in grads {
+        for g in grads.iter() {
             world_positions[g.index] -= g.gradient * s * inv_masses[g.index];
         }
     }
@@ -102,11 +99,13 @@ fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, mob
 fn generate_collision_constraints(
     cur_mobj_id: u32,
     new_mobj_positions: &[Vec3],
+    inverse_masses: &[f32],
     spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
     mobj_map: &HashMap<u32, &Mobject>,
 ) -> Vec<PhysicsConstraint> {
     let mut collisions: Vec<PhysicsConstraint> = Vec::new();
-    for (j, v) in new_mobj_positions.iter().enumerate() {
+    for (j, (v, &w)) in new_mobj_positions.iter().zip(inverse_masses.iter()).enumerate() {
+        if w <= 0.0 { continue ; }
         let pos = Vector3::new(v.x, v.y, v.z);
         spatial_hash
             .iter_cubes(pos, pos)
@@ -120,10 +119,23 @@ fn generate_collision_constraints(
                     let adj_vertices = m.get_physics_vertices();
                     let indices = m.indices();
                     let (v1, v2, v3) = (&adj_vertices[indices[*i * 3] as usize], &adj_vertices[indices[*i*3 + 1] as usize], &adj_vertices[indices[*i*3 + 2] as usize]);
-                    let n = nalgebra_glm::cross(&(v2.position - v1.position), &(v3.position - v1.position));
-                    let M = Matrix3x2::from_columns(&[v2.position - v1.position, v3.position - v1.position]);
-                    let P = M * (M.transpose() * M).try_inverse().unwrap() * M.transpose();
-                    let q_c = P * v;
+                    let e1 = v2.position - v1.position;
+                    let e2 = v3.position - v1.position;
+                    let mut n = nalgebra_glm::cross(&e1, &e2);
+                    // TODO: maybe don't need this check?
+                    let mag_sq = n.norm_squared();
+                    if mag_sq < 1e-8 {
+                        return;
+                    }
+                    n = n.normalize();
+
+                    let v_to_p = v - v1.position;
+                    let dist = nalgebra_glm::dot(&v_to_p, &n);
+                    let q_c = v - (dist * n);
+                    // took me forever to debug this! see why you need to negate?
+                    if (v - q_c).dot(&n) < 0.0 {
+                        n = -n;
+                    }
                     collisions.push(
                         PhysicsConstraint::Collision(CollisionConstraint {
                             inp_vertex_index: j,
@@ -164,7 +176,7 @@ impl PBDSolver {
 
             let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
             // TODO: collision constraints
-            let collisions = generate_collision_constraints(id, &ps, spatial_hash, &mobj_map);
+            let collisions = generate_collision_constraints(id, &ps, &vertices.iter().map(|v| v.w).collect::<Vec<f32>>(),  spatial_hash, &mobj_map);
             let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
             constraints.extend(collisions.into_iter());
 

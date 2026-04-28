@@ -22,15 +22,16 @@ define_shape!(
 fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>) {
     let mut positions = vec![];
     let mut indices = vec![];
-
+    let m = spacing * (width / 2) as f32;
+    let my = spacing * (height / 2) as f32;
     // positions
     for y in 0..height {
         for x in 0..width {
             positions.push(Vec3::new(
-                x as f32 * spacing,
+                x as f32 * spacing - m,
                 // 0.0,
-                y as f32 * spacing,
-                0.0
+                y as f32 * spacing - my,
+                0.35
             ));
         }
     }
@@ -119,7 +120,7 @@ impl Default for Cloth {
             .map(|(pos, norm)| {
                 RenderVertex::new(
                     *pos,
-                    Vec3::new(0.7, 0.7, 1.0),
+                    Vec3::new(0.0, 0.0, 1.0),
                     *norm,
                     None,
                 )

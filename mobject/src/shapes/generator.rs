@@ -135,11 +135,6 @@ macro_rules! define_shape {
             // constraint generation
             pub fn make_static(mut self) -> Self {
                 let mut new_constraints = Vec::new();
-                new_constraints.push(
-                    crate::physics::constraints::PhysicsConstraint::RigidBody(
-                        crate::physics::constraints::ShapeConstraint()
-                    )
-                );
                 for (i, v) in self.vertices.iter_mut().enumerate() {
                     new_constraints.push(
                         crate::physics::constraints::PhysicsConstraint::Static(

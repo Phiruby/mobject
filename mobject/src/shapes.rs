@@ -52,7 +52,7 @@ pub struct RenderVertex {
     pub normal: Vec3,
     pub tex_coord: Vec2,
 }
-
+#[derive(Debug)]
 pub struct PhysicsVertex {
     pub position: Vec3,
     pub velocity: Vec3,

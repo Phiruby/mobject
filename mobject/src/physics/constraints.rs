@@ -24,7 +24,7 @@ pub trait Constraint {
 /// Attach to a particular vertex.
 /// `inp_vertex_index` represents the index of the vertex of parent `mobj` that you want to attach
 /// the `attach_to` vertex to
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AttachmentConstraint<'a> {
     pub inp_vertex_index: usize,
     pub attached_to: &'a PhysicsVertex
@@ -33,20 +33,20 @@ pub struct AttachmentConstraint<'a> {
 /// Pins to a particular point.
 /// Unlike `AttachmentConstraint`, the point this is pinned to
 /// is a static vector: it does not change
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StaticConstraint {
     pub inp_vertex_index: usize,
     pub pin_to: Vec3
 }
 
 /// Constraint to make a mobject a rigid body
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ShapeConstraint();
 
 // NOTE: this can be used for both continuous and static collisions
 // provided that the right arguments are passed (it is on the caller to compute the correct)
 // q and n, which represent point of contact and normal, respectively
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CollisionConstraint {
     pub inp_vertex_index: usize,
     pub q: Vec3,
@@ -54,7 +54,7 @@ pub struct CollisionConstraint {
 }
 
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StretchConstraint {
     pub vert_ind1: usize,
     pub vert_ind2: usize,
@@ -63,7 +63,7 @@ pub struct StretchConstraint {
     pub k: f32
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PhysicsConstraint {
     Attachment(AttachmentConstraint<'static>),
     Static(StaticConstraint),
@@ -102,7 +102,7 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index] - self.q).dot(&self.n)
+        (positions[self.inp_vertex_index] - self.q).dot(&self.n) - 0.01
     }
     fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
         vec![

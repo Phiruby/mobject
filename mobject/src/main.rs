@@ -1,4 +1,5 @@
 use mobject::Scene;
+use mobject::shapes::Triangle;
 // use mobject::shapes::surface::Surface3D;
 use mobject::shapes::{ObjModel, Points, Rectangle, Cube, objects::Cloth};
 use nalgebra_glm as glm;
@@ -25,6 +26,7 @@ fn main() {
     );
     let c = Box::new(Cloth::default().anchor(vec![0, 9, 90, 99]));
     let mut scene = Scene::new();
+    // scene.add_baseplate();
     scene.wait(3);
     scene.add(c);
     scene.wait(3);
@@ -59,7 +61,7 @@ fn main() {
     // scene.wait(3);
     // let camera_motion = scene
     //     .camera()
-    //     .move_to(glm::make_vec3(&[4.0, 1.0, 5.0]))
+    //     .move_to(glm::make_vec3(&[4.0, 1.0, -5.0]))
     //     .with_duration(2.0);
 
     // scene.motion(camera_motion);
