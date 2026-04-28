@@ -1,97 +1,59 @@
-macro_rules! define_shape {
-    (
-        $vis:vis struct $name:ident {
-            vertices: $vty:ty,
-            indices:  $ity:ty $(,)?
+use std::ops::{Deref, DerefMut};
+
+use cgmath::Vector3;
+use spatial_hash_3d::{BoxIdxIterator, BoxIterator, BoxIteratorMut, SpatialHashGrid};
+
+pub struct SpatialHash3D<T> {
+    cube_sidelength: f32,
+    grid: SpatialHashGrid<T>,
+}
+
+impl<T> Deref for SpatialHash3D<T> {
+    type Target = SpatialHashGrid<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.grid
+    }
+}
+
+impl<T> DerefMut for SpatialHash3D<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.grid
+    }
+}
+
+impl<T> SpatialHash3D<T> {
+    pub fn new<V>(partitions: (usize, usize, usize), filler: V, cube_sidelength: f32) -> Self
+    where V: FnMut() -> T {
+        Self {
+            cube_sidelength,
+            grid: SpatialHashGrid::new(partitions.0, partitions.1, partitions.2, filler),
         }
-    ) => {
-        $vis struct $name {
-            pub vertices: $vty,
-            pub indices:  $ity,
+    }
 
-            uniform_buffers: Option<[Buffer; MAX_FRAMES_IN_FLIGHT as usize]>,
-            uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
-            uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
-            ubo: UBO,
-        }
+    pub fn iter_cubes_mut(
+        &mut self,
+        min: Vector3<f32>,
+        max: Vector3<f32>,
+    ) -> BoxIteratorMut<'_, T> {
+        let min = Vector3::new((min / self.cube_sidelength).x as u32, (min / self.cube_sidelength).y as u32, (min / self.cube_sidelength).z as u32);
+        let max = Vector3::new((max / self.cube_sidelength).x as u32, (max / self.cube_sidelength).y as u32, (max / self.cube_sidelength).z as u32);
+        self.grid.iter_cubes_mut(min, max)
+    }
 
-        impl $name {
-            pub fn with_ubo(vertices: $vty, indices: $ity, ubo: UBO) -> Self {
-                Self {
-                    vertices,
-                    indices,
-                    uniform_buffers: None,
-                    uniform_buffer_memories: None,
-                    uniform_mapped_memories: None,
-                    ubo,
-                }
-            }
+    pub fn iter_cubes(&self, min: Vector3<f32>, max: Vector3<f32>) -> BoxIterator<'_, T> {
+        let min = Vector3::new((min / self.cube_sidelength).x as u32, (min / self.cube_sidelength).y as u32, (min / self.cube_sidelength).z as u32);
+        let max = Vector3::new((max / self.cube_sidelength).x as u32, (max / self.cube_sidelength).y as u32, (max / self.cube_sidelength).z as u32);
+        self.grid.iter_cubes(min, max)
+    }
 
-            pub fn with_indices(vertices: $vty, indices: $ity) -> Self {
-                Self::with_ubo(
-                    vertices,
-                    indices,
-                    UBO { model: glm::identity() },
-                )
-            }
+    pub fn iter_cube_indices(&self, min: Vector3<f32>, max: Vector3<f32>) -> BoxIdxIterator {
+        let min = Vector3::new((min / self.cube_sidelength).x as u32, (min / self.cube_sidelength).y as u32, (min / self.cube_sidelength).z as u32);
+        let max = Vector3::new((max / self.cube_sidelength).x as u32, (max / self.cube_sidelength).y as u32, (max / self.cube_sidelength).z as u32);
+        self.grid.iter_cube_indices(min, max)
+    }
 
-            pub fn new(vertices: $vty) -> Self {
-                Self::with_ubo(
-                    vertices,
-                    (0..vertices.len()).collect(),
-                    UBO { model: glm::identity() },
-                )
-            }
-        }
-
-        impl Shape for $name {
-            fn build(
-                self: Box<Self>,
-                device: &Device,
-                mem_properties: PhysicalDeviceMemoryProperties,
-            ) -> Box<dyn BuiltShape> {
-                let (uniform_buffers, uniform_buffer_memories, uniform_mapped_memories) =
-                    buffers::create_uniform_buffers::<{ MAX_FRAMES_IN_FLIGHT as usize }>(
-                        device,
-                        mem_properties,
-                        std::mem::size_of::<UBO>() as u64,
-                    );
-
-                let mut this = *self;
-                this.uniform_buffers = Some(uniform_buffers);
-                this.uniform_buffer_memories = Some(uniform_buffer_memories);
-                this.uniform_mapped_memories = Some(uniform_mapped_memories);
-
-                Box::new(this)
-            }
-        }
-
-        impl BuiltShape for $name {
-            fn get_vertices(&self) -> &[RenderVertex] {
-                &self.vertices
-            }
-
-            fn indices(&self) -> &[u32] {
-                &self.indices
-            }
-
-            fn get_uniform_buffer(
-                &self,
-            ) -> (
-                &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-                &[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
-                &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
-            ) {
-                (
-                    self.uniform_buffers.as_ref().unwrap(),
-                    self.uniform_buffer_memories.as_ref().unwrap(),
-                    self.uniform_mapped_memories.as_ref().unwrap(),
-                )
-            }
-
-            fn get_ubo_contents(&self) -> &UBO {
-                &self.ubo
-            }
-        }
-    };
+    pub fn pos_to_index(&self, pos: Vector3<f32>) -> Option<usize> {
+        let p = Vector3::new((pos / self.cube_sidelength).x as u32, (pos / self.cube_sidelength).y as u32, (pos / self.cube_sidelength).z as u32);
+        self.grid.pos_to_index(p)
+    }
 }
