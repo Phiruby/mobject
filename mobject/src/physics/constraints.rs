@@ -1,9 +1,17 @@
 use nalgebra_glm::{Mat3, Vec3};
 use crate::shapes::PhysicsVertex;
+
+
 #[derive(Debug)]
 pub struct ConstrainedGradient {
     pub index: usize,
     pub gradient: Vec3
+}
+
+#[derive(PartialEq)]
+pub enum Equality {
+    Equal,
+    Inequality
 }
 
 pub trait Constraint {
@@ -16,6 +24,7 @@ pub trait Constraint {
 /// Attach to a particular vertex.
 /// `inp_vertex_index` represents the index of the vertex of parent `mobj` that you want to attach
 /// the `attach_to` vertex to
+#[derive(Clone)]
 pub struct AttachmentConstraint<'a> {
     pub inp_vertex_index: usize,
     pub attached_to: &'a PhysicsVertex
@@ -24,15 +33,28 @@ pub struct AttachmentConstraint<'a> {
 /// Pins to a particular point.
 /// Unlike `AttachmentConstraint`, the point this is pinned to
 /// is a static vector: it does not change
+#[derive(Clone)]
 pub struct StaticConstraint {
     pub inp_vertex_index: usize,
     pub pin_to: Vec3
 }
 
 /// Constraint to make a mobject a rigid body
+#[derive(Clone)]
 pub struct ShapeConstraint();
 
+// NOTE: this can be used for both continuous and static collisions
+// provided that the right arguments are passed (it is on the caller to compute the correct)
+// q and n, which represent point of contact and normal, respectively
+#[derive(Clone)]
+pub struct CollisionConstraint {
+    pub inp_vertex_index: usize,
+    pub q: Vec3,
+    pub n: Vec3
+}
+
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
+#[derive(Clone)]
 pub struct StretchConstraint {
     pub vert_ind1: usize,
     pub vert_ind2: usize,
@@ -41,11 +63,13 @@ pub struct StretchConstraint {
     pub k: f32
 }
 
+#[derive(Clone)]
 pub enum PhysicsConstraint {
     Attachment(AttachmentConstraint<'static>),
     Static(StaticConstraint),
     Stretch(StretchConstraint),
-    RigidBody(ShapeConstraint)
+    RigidBody(ShapeConstraint),
+    Collision(CollisionConstraint)
 }
 
 impl Constraint for AttachmentConstraint<'_> {
@@ -71,6 +95,20 @@ impl Constraint for StaticConstraint {
             ConstrainedGradient {
                 index: self.inp_vertex_index as usize,
                 gradient: (positions[self.inp_vertex_index] - self.pin_to) * 2.0
+            }
+        ]
+    }
+}
+
+impl Constraint for CollisionConstraint {
+    fn evaluate(&self, positions: &[Vec3]) -> f32 {
+        (positions[self.inp_vertex_index] - self.q).dot(&self.n)
+    }
+    fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
+        vec![
+            ConstrainedGradient {
+                index: self.inp_vertex_index as usize,
+                gradient: self.n
             }
         ]
     }
@@ -104,6 +142,7 @@ impl Constraint for PhysicsConstraint {
             PhysicsConstraint::Static(c) => c.evaluate(positions),
             PhysicsConstraint::Attachment(c) => c.evaluate(positions),
             PhysicsConstraint::Stretch(c) => c.evaluate(positions),
+            PhysicsConstraint::Collision(c) => c.evaluate(positions),
             PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have an evaluate function")
         }
     }
@@ -112,7 +151,20 @@ impl Constraint for PhysicsConstraint {
             PhysicsConstraint::Static(c) => c.gradient(positions),
             PhysicsConstraint::Attachment(c) => c.gradient(positions),
             PhysicsConstraint::Stretch(c) => c.gradient(positions),
+            PhysicsConstraint::Collision(c) => c.gradient(positions),
             PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have a gradient function")
         }
     }
+}
+
+impl PhysicsConstraint {
+    pub fn equality_type(&self) -> Equality {
+        match self {
+            PhysicsConstraint::Static(_) => Equality::Equal,
+            PhysicsConstraint::Attachment(_) => Equality::Equal,
+            PhysicsConstraint::Stretch(_) => Equality::Equal,
+            PhysicsConstraint::Collision(_) => Equality::Inequality,
+            PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have an equality type")
+        }
+     }
 }

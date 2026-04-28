@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+
+use cgmath::Vector3;
 use nalgebra_glm::{Vec3, Mat3};
 use shapeject::SpatialHash3D;
 use spatial_hash_3d::SpatialHashGrid;
-use crate::physics::constraints::{Constraint, PhysicsConstraint};
+use crate::physics::constraints::{CollisionConstraint, Constraint, Equality, PhysicsConstraint};
 use crate::{scene::Mobject};
 use crate::physics;
-use nalgebra::{Complex, SVD};
+use nalgebra::{Complex, Matrix3, Matrix3x2, SVD};
 pub struct PBDSolver ();
 
 /// Implementation of https://matthias-research.github.io/pages/publications/MeshlessDeformations_SIG05.pdf
@@ -69,12 +72,20 @@ fn project_constraints(
             continue;
         }
         let ev = c.evaluate(world_positions);
+        if c.equality_type() == Equality::Inequality {
+            if ev > 0.0 {
+                continue;
+            }
+        }
         if ev.abs() <= f32::EPSILON {
             continue;
         }
         let grads = c.gradient(world_positions);
         let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm());
         let s = ev / denom;
+        if s.is_nan() {
+            dbg!("Ooof");
+        }
         for g in grads {
             world_positions[g.index] -= g.gradient * s * inv_masses[g.index];
         }
@@ -88,14 +99,64 @@ fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, mob
     }
 }
 
+fn generate_collision_constraints(
+    cur_mobj_id: u32,
+    new_mobj_positions: &[Vec3],
+    spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
+    mobj_map: &HashMap<u32, &Mobject>,
+) -> Vec<PhysicsConstraint> {
+    let mut collisions: Vec<PhysicsConstraint> = Vec::new();
+    for (j, v) in new_mobj_positions.iter().enumerate() {
+        let pos = Vector3::new(v.x, v.y, v.z);
+        spatial_hash
+            .iter_cubes(pos, pos)
+            .for_each(|(_, ent)| {
+                ent.iter().for_each(|(mobj_id, i)| {
+                    // NOTE: skipping self-collision
+                    if *mobj_id == cur_mobj_id {
+                        return ;
+                    }
+                    let m = mobj_map.get(mobj_id).unwrap();
+                    let adj_vertices = m.get_physics_vertices();
+                    let indices = m.indices();
+                    let (v1, v2, v3) = (&adj_vertices[indices[*i * 3] as usize], &adj_vertices[indices[*i*3 + 1] as usize], &adj_vertices[indices[*i*3 + 2] as usize]);
+                    let n = nalgebra_glm::cross(&(v2.position - v1.position), &(v3.position - v1.position));
+                    let M = Matrix3x2::from_columns(&[v2.position - v1.position, v3.position - v1.position]);
+                    let P = M * (M.transpose() * M).try_inverse().unwrap() * M.transpose();
+                    let q_c = P * v;
+                    collisions.push(
+                        PhysicsConstraint::Collision(CollisionConstraint {
+                            inp_vertex_index: j,
+                            q: q_c,
+                            n
+                        }
+                    ));
+                })
+            });
+    }
+    collisions
+}
+
 impl PBDSolver {
-    pub fn update(&mut self, mobjects: &mut [Mobject], spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, dt: f32) {
-        // TODO: external forces
+    pub fn update(
+        &mut self,
+        mobjects: &mut [Mobject],
+        spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>,
+        dt: f32
+    ) {
         if mobjects.len() == 0 {
             return;
         }
-        for mobj in mobjects.iter_mut() {
+        for k in 0..mobjects.len() {
+            // HACK: this isn't looking nice whatsoever, just a workaround for now...
+            let (left, right) = mobjects.split_at_mut(k);
+            let (mobj, rest) = right.split_first_mut().unwrap();
+            let id = mobj.id;
             let (vertices, constraints) = mobj.get_mut_vertices_and_constraints();
+            let mobj_map: HashMap<u32, &Mobject> = left.iter()
+                .chain(rest.iter())
+                .map(|m| (m.id, m))
+                .collect();
 
             vertices.iter_mut().for_each(|v| {
                 v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
@@ -103,9 +164,15 @@ impl PBDSolver {
 
             let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
             // TODO: collision constraints
+            let collisions = generate_collision_constraints(id, &ps, spatial_hash, &mobj_map);
+            let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
+            constraints.extend(collisions.into_iter());
+
             let inv_masses: Vec<f32> = vertices.iter().map(|v| v.w).collect();
             let bs: Vec<Vec3> = vertices.iter().map(|v| v.body_space_position).collect();
-            project_constraints(&mut ps, &bs, &inv_masses,constraints);
+
+            project_constraints(&mut ps, &bs, &inv_masses, &constraints);
+
             for (v, p) in vertices.iter_mut().zip(ps.iter()) {
                 v.velocity = (p - v.position) / dt;
                 v.position = *p;

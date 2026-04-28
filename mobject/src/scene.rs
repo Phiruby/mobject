@@ -20,7 +20,7 @@ use crate::physics::pbd::PBDSolver;
 pub type MobjectId = u32;
 use crate::MAX_FRAMES_IN_FLIGHT;
 
-const SPATIAL_HASH_SIZE: f32 = 0.1;
+const SPATIAL_HASH_SIZE: f32 = 0.5;
 const BOTTOM_LEFT: Vector3<f32> = Vector3::new(-5.0, -5.0, -5.0);
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 2] = ["VK_KHR_swapchain", "VK_EXT_descriptor_indexing"];
@@ -318,7 +318,7 @@ impl Scene {
             framebuffers,
 
             solver: PBDSolver(),
-            spatial_hash: SpatialHash3D::new((80, 80, 80), Vec::new, SPATIAL_HASH_SIZE)
+            spatial_hash: SpatialHash3D::new((50, 50, 50), Vec::new, SPATIAL_HASH_SIZE)
                 .set_bottom_left(BOTTOM_LEFT)
         }
     }
@@ -462,6 +462,7 @@ impl Scene {
             if let SceneState::Waiting { from, duration } = self.state {
                 let elapsed = from.elapsed();
                 if elapsed > duration {
+                    // dbg!(&self.spatial_hash);
                     self.set_state(SceneState::Moving);
                 }
             }

@@ -146,15 +146,15 @@ impl Default for Rectangle {
 impl Default for Cube {
     fn default() -> Self {
         let positions = vec![
-            Vec3::new(-0.25, -0.25,  0.25),
-            Vec3::new( 0.25, -0.25,  0.25),
-            Vec3::new( 0.25,  0.25,  0.25),
-            Vec3::new(-0.25,  0.25,  0.25),
+            Vec3::new(-0.25, -0.25,  0.5),
+            Vec3::new( 0.25, -0.25,  0.5),
+            Vec3::new( 0.25,  0.25,  0.5),
+            Vec3::new(-0.25,  0.25,  0.5),
 
-            Vec3::new(-0.25, -0.25, -0.25),
-            Vec3::new( 0.25, -0.25, -0.25),
-            Vec3::new( 0.25,  0.25, -0.25),
-            Vec3::new(-0.25,  0.25, -0.25),
+            Vec3::new(-0.25, -0.25, 0.25),
+            Vec3::new( 0.25, -0.25, 0.25),
+            Vec3::new( 0.25,  0.25, 0.25),
+            Vec3::new(-0.25,  0.25, 0.25),
         ];
 
         let indices: Vec<usize> = vec![
