@@ -102,48 +102,7 @@ fn create_stretch_constraints(
     constraints
 }
 
-fn create_bend_constraints(
-    width: usize,
-    height: usize,
-    positions: &[Vec3],
-    k: f32,
-) -> Vec<PhysicsConstraint> {
-    let mut constraints = vec![];
 
-    let idx = |x: usize, y: usize| y * width + x;
-
-    for y in 0..height - 1 {
-        for x in 0..width - 1 {
-            let i0 = idx(x, y);
-            let i1 = idx(x + 1, y);
-            let i2 = idx(x, y + 1);
-            let i3 = idx(x + 1, y + 1);
-            if i0 >= 2 {continue;}
-
-            let x1 = positions[i1];
-            let x2 = positions[i2];
-            let x3 = positions[i0];
-            let x4 = positions[i3];
-
-            let e = x2 - x1;
-            let n1 = nalgebra_glm::cross(&e, &(x3 - x1)).normalize();
-            let n2 = nalgebra_glm::cross(&e, &(x4 - x1)).normalize();
-            let phi = nalgebra_glm::dot(&n1, &n2).clamp(-1.0, 1.0).acos();
-            // dbg!(x1, x2, x3, x4, n1, n2, phi);
-
-            constraints.push(PhysicsConstraint::Bend(BendConstraint {
-                vert_ind1: i1,
-                vert_ind2: i2,
-                vert_ind3: i0,
-                vert_ind4: i3,
-                k,
-                phi,
-            }));
-        }
-    }
-
-    constraints
-}
 
 impl Default for Cloth {
     fn default() -> Self {
@@ -176,13 +135,6 @@ impl Default for Cloth {
             &positions,
             0.5,
         ));
-
-        // constraints.extend(create_bend_constraints(
-        //     width,
-        //     height,
-        //     &positions,
-        //     1.0,
-        // ));
 
         Self::new()
         .with_vertices(vertices)
