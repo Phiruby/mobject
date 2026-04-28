@@ -25,8 +25,8 @@ fn main() {
     );
     let c = Box::new(Cloth::default().anchor(vec![0, 9, 90, 99]));
     let mut scene = Scene::new();
-    scene.wait(3);
-    scene.add(c);
+    // scene.wait(3);
+    // scene.add(c);
     scene.wait(3);
     scene.add(rect);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));

@@ -194,6 +194,7 @@ pub trait ShapeConstruction {
     fn texture_path(&self) -> Option<&str>;
     fn sync_phys_and_render_vertices(&mut self);
     fn set_com(&mut self, com: Vec3);
+    fn update_spatial_hash(&self, space: &mut shapeject::SpatialHash3D<Vec<(u32, usize)>>, mid: u32);
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}

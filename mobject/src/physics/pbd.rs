@@ -1,4 +1,6 @@
 use nalgebra_glm::{Vec3, Mat3};
+use shapeject::SpatialHash3D;
+use spatial_hash_3d::SpatialHashGrid;
 use crate::physics::constraints::{Constraint, PhysicsConstraint};
 use crate::{scene::Mobject};
 use crate::physics;
@@ -16,7 +18,7 @@ fn shape_matching(
         .iter()
         .zip(body_positions)
         .zip(inv_masses.iter())
-        // .filter(|((_, _), m)| **m > 0.0)
+        .filter(|((_, _), m)| **m > 0.0)
         .map(
             |((w, b), &m)| nalgebra_glm::outer_product(&(w - current_com), b)
         )
@@ -25,7 +27,7 @@ fn shape_matching(
     let m2 = body_positions
         .iter()
         .zip(inv_masses.iter())
-        // .filter(|(_, m)| **m > 0.0)
+        .filter(|(_, m)| **m > 0.0)
         .map(|(b, &m)| nalgebra_glm::outer_product(b, b))
         .sum::<nalgebra_glm::Mat3>();
 
@@ -79,13 +81,20 @@ fn project_constraints(
     }
 }
 
+fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, mobjects: &mut [Mobject]) {
+    spatial_hash.clear(&mut |v: &mut Vec<(u32, usize)>| v.clear());
+    for mobj in mobjects.iter_mut() {
+        mobj.update_spatial_hash(spatial_hash, mobj.id);
+    }
+}
+
 impl PBDSolver {
-    pub fn update(&mut self, mobjects: &mut [Mobject], dt: f32) {
+    pub fn update(&mut self, mobjects: &mut [Mobject], spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, dt: f32) {
         // TODO: external forces
         if mobjects.len() == 0 {
             return;
         }
-        for mobj in mobjects {
+        for mobj in mobjects.iter_mut() {
             let (vertices, constraints) = mobj.get_mut_vertices_and_constraints();
 
             vertices.iter_mut().for_each(|v| {
@@ -104,5 +113,6 @@ impl PBDSolver {
             let com = physics::center_of_mass(&vertices);
             mobj.set_com(com);
         }
+        rebuild_spatial_hash(spatial_hash, mobjects);
     }
 }

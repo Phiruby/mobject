@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cgmath = "0.18.0"
+spatial_hash_3d = "0.1.6"
 
 [lib]
-proc-macro = true

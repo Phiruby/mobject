@@ -9,14 +9,19 @@ use glfw::PWindow;
 use nalgebra_glm as glm;
 use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape};
 use std::collections::{HashMap, VecDeque};
+use cgmath::Vector3;
 use std::ffi::{CString, c_void};
 use std::ops::{Deref, DerefMut};
+use shapeject::SpatialHash3D;
 use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::shapes::animations::AnimationProxy;
 use crate::physics::pbd::PBDSolver;
 pub type MobjectId = u32;
 use crate::MAX_FRAMES_IN_FLIGHT;
+
+const SPATIAL_HASH_SIZE: f32 = 0.1;
+const BOTTOM_LEFT: Vector3<f32> = Vector3::new(-5.0, -5.0, -5.0);
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&str; 2] = ["VK_KHR_swapchain", "VK_EXT_descriptor_indexing"];
 
@@ -122,7 +127,8 @@ pub struct Scene {
     cmd_pool: CommandPool,
     framebuffers: Vec<Framebuffer>,
 
-    solver: PBDSolver
+    solver: PBDSolver,
+    spatial_hash: SpatialHash3D<Vec<(MobjectId, usize)>>
 }
 
 impl Scene {
@@ -311,7 +317,9 @@ impl Scene {
             cmd_pool: pool,
             framebuffers,
 
-            solver: PBDSolver()
+            solver: PBDSolver(),
+            spatial_hash: SpatialHash3D::new((80, 80, 80), Vec::new, SPATIAL_HASH_SIZE)
+                .set_bottom_left(BOTTOM_LEFT)
         }
     }
 
@@ -447,7 +455,7 @@ impl Scene {
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
 
-            self.solver.update(&mut self.mobjects, 0.01);
+            self.solver.update(&mut self.mobjects, &mut self.spatial_hash, 0.01);
             self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(); });
 
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);

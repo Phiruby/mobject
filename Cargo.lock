@@ -34,6 +34,15 @@ checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
 name = "approx"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
@@ -199,6 +208,16 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "cgmath"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a98d30140e3296250832bbaaff83b27dcd6fa3cc70fb6f1f3e5c9c0023b5317"
+dependencies = [
+ "approx 0.4.0",
+ "num-traits",
+]
 
 [[package]]
 name = "cmake"
@@ -737,6 +756,7 @@ name = "mobject"
 version = "0.1.0"
 dependencies = [
  "ash",
+ "cgmath",
  "dialoguer",
  "glfw",
  "image",
@@ -745,6 +765,7 @@ dependencies = [
  "ndarray",
  "obj-rs",
  "shapeject",
+ "spatial_hash_3d",
 ]
 
 [[package]]
@@ -763,7 +784,7 @@ version = "0.34.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df76ea0ff5c7e6b88689085804d6132ded0ddb9de5ca5b8aeb9eeadc0508a70a"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "glam 0.14.0",
  "glam 0.15.2",
  "glam 0.16.0",
@@ -797,7 +818,7 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "784a598b961eafe0f3329861482ebdb73ecdcc02f771192783c099dd3b438461"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "nalgebra",
  "num-traits",
  "simba",
@@ -1247,6 +1268,10 @@ dependencies = [
 [[package]]
 name = "shapeject"
 version = "0.1.0"
+dependencies = [
+ "cgmath",
+ "spatial_hash_3d",
+]
 
 [[package]]
 name = "shell-words"
@@ -1266,7 +1291,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c99284beb21666094ba2b75bbceda012e610f5479dfcc2d6e2426f53197ffd95"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "num-complex",
  "num-traits",
  "paste",
@@ -1293,6 +1318,16 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "spatial_hash_3d"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d748fd5865c43179bb8a8959e55cdaa00a929831d5aa0c0977e78820b7b32a1a"
+dependencies = [
+ "cgmath",
+ "itertools",
+]
 
 [[package]]
 name = "stable_deref_trait"
