@@ -5,11 +5,12 @@ use std::collections::HashMap;
 use std::ffi::CString;
 pub use primitive::PrimitivePipeline;
 pub use bezier::BezierPipeline;
-use ash::vk::{self, CommandBuffer, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, Extent2D, GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
+use ash::vk::{self, Buffer, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
-use crate::scene::Texture;
-use crate::shapes::{BuiltShape};
-use crate::{MAX_FRAMES_IN_FLIGHT, shaders};
+use crate::scene::{Mobject, Texture};
+use core::ffi::c_void;
+use crate::shapes::{BuiltShape, RenderVertex, UBO};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, window};
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
 /// adhered. Each mobject implementing a specific pipeline is responsible
@@ -33,6 +34,166 @@ struct CompletePipeline<'a> {
     color_attachment_count: u32,
     rasterization_info: PipelineRasterizationStateCreateInfo<'a>,
     push_constant: Option<PushConstantRange>
+}
+
+struct PipelineState {
+    extent: Extent2D,
+    pub vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    pub vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    pub index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    pub index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
+    uniform_buffer_mapped_memories: [*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
+    render_pass: RenderPass,
+    // TODO: move framebuffers to pipeline level
+    // framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
+    mobject_descriptor_set_layout: DescriptorSetLayout,
+    mobject_descriptor_pool: DescriptorPool,
+    pipeline: Pipeline,
+    pipeline_layout: PipelineLayout
+}
+
+trait GraphicsPipeline {
+    fn get_pipeline_info(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> CompletePipeline<'static>;
+    fn render_pass(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> RenderPass;
+    fn vertex_binding_description() -> VertexInputBindingDescription;
+    fn vertex_attribute_description() -> Vec<VertexInputAttributeDescription>;
+    fn mobject_descriptor_set_layout(device: &Device) -> DescriptorSetLayout;
+    fn mobject_descriptor_pool(device: &Device) -> DescriptorPool;
+}
+
+impl PipelineState {
+    pub fn new<P: GraphicsPipeline>(
+        logical_device: &Device,
+        nvertices: usize,
+        nindices: usize,
+        scene_descriptor_layout: DescriptorSetLayout,
+        extent: Extent2D,
+        surface_format: SurfaceFormatKHR,
+        depth_format: vk::Format,
+        physical_device_memory_properties: PhysicalDeviceMemoryProperties,
+    ) -> Self {
+
+        let (vertex_buffers, vertex_buffer_memories) = buffers::create_vertex_buffers(logical_device, nvertices, physical_device_memory_properties);
+
+        let (index_buffers, index_buffer_memories) = buffers::create_index_buffers(logical_device, nindices, physical_device_memory_properties);
+
+        let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, std::mem::size_of::<UBO>() as u64);
+
+        let complete_pipeline = P::get_pipeline_info(logical_device, extent, depth_format, surface_format);
+        let render_pass = P::render_pass(logical_device, extent, depth_format, surface_format);
+        let mobject_descriptor_set_layout = P::mobject_descriptor_set_layout(logical_device);
+        let mobject_descriptor_pool = P::mobject_descriptor_pool(logical_device);
+        let (pipeline, pipeline_layout) = create_graphics_pipeline(logical_device, extent, complete_pipeline, render_pass, mobject_descriptor_set_layout, scene_descriptor_layout);
+        Self {
+            extent,
+            vertex_buffers,
+            vertex_buffer_memories,
+            index_buffers,
+            index_buffer_memories,
+            uniform_buffers,
+            uniform_buffer_memories,
+            uniform_buffer_mapped_memories: ubo_mapped_memories,
+            render_pass,
+            // framebuffers,
+            mobject_descriptor_set_layout,
+            mobject_descriptor_pool,
+            pipeline,
+            pipeline_layout
+        }
+    }
+
+    pub fn create_mobject_descriptor_sets(
+        &self,
+        device: &Device,
+        uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    ) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+        let layouts = [
+            self.mobject_descriptor_set_layout;
+            MAX_FRAMES_IN_FLIGHT as usize
+        ];
+        let alloc_info = DescriptorSetAllocateInfo {
+            s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+            descriptor_pool: self.mobject_descriptor_pool,
+            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+            p_set_layouts: layouts.as_ptr(),
+            ..Default::default()
+        };
+        let descriptor_sets = unsafe {
+            device.allocate_descriptor_sets(&alloc_info)
+            .unwrap()
+        };
+        (0..MAX_FRAMES_IN_FLIGHT)
+            .for_each(|i| {
+                let uniform_buffer_info = DescriptorBufferInfo {
+                    buffer: uniform_buffers[i as usize],
+                    offset: 0,
+                    range: vk::WHOLE_SIZE
+                };
+                let write_op = [
+                    WriteDescriptorSet {
+                        s_type: StructureType::WRITE_DESCRIPTOR_SET,
+                        dst_set: descriptor_sets[i as usize],
+                        dst_binding: 0,
+                        dst_array_element: 0,
+                        descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                        descriptor_count: 1,
+                        p_buffer_info: &uniform_buffer_info,
+                        ..Default::default()
+                    }
+                ];
+                unsafe {
+                    device.update_descriptor_sets(&write_op, &[]);
+                }
+            });
+        descriptor_sets.try_into().unwrap()
+    }
+
+    pub fn draw_frame(
+        &self,
+        device: &Device,
+        cmd_buffer: CommandBuffer,
+        frame_index: usize,
+        scene_descriptor_set: DescriptorSet,
+        mobjects: &[&Box<dyn BuiltShape>],
+        mobject_descriptor_sets: &[DescriptorSet],
+        texture_indices: &HashMap<String, Texture>,
+    ) {
+        unsafe {
+            device.cmd_bind_pipeline(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline)
+        };
+
+        let vertex_buffer = self.vertex_buffers[frame_index];
+        let index_buffer = self.index_buffers[frame_index];
+        unsafe {
+            device.cmd_bind_vertex_buffers(cmd_buffer, 0, &[vertex_buffer], &[0])
+        };
+        unsafe {
+            device.cmd_bind_index_buffer(cmd_buffer, index_buffer, 0, IndexType::UINT32)
+        };
+        // bind scene-level info
+        unsafe {
+            device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline_layout, 0, &[scene_descriptor_set], &[])
+        };
+
+        bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets, texture_indices);
+    }
+
+    pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[RenderVertex], indices: &[u32], mobjects: &[&Mobject]) {
+        window::fill_vertex_buffer(device, self.vertex_buffer_memories[frame_index], vertices);
+        window::fill_index_buffer(device, self.index_buffer_memories[frame_index], indices);
+        mobjects
+            .iter()
+            .for_each(|mobj| {
+                let (_, _, mapped) = mobj.get_uniform_buffer();
+                window::fill_uniform_buffer(
+                    mapped[frame_index],
+                    mobj.get_ubo_contents()
+                );
+            });
+    }
+
 }
 
 fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {

@@ -61,7 +61,7 @@ pub fn shadow_render_pass(device: &Device, shadow_depth_format: vk::Format) -> R
     unsafe { device.create_render_pass(&rp_info, None) }.unwrap()
 }
 
-pub fn create(format: SurfaceFormatKHR, device: &Device, depth_format: vk::Format) -> RenderPass {
+pub fn color_and_depth(format: SurfaceFormatKHR, device: &Device, depth_format: vk::Format) -> RenderPass {
     // fragment shader will only output color (layout 0 is color); so just color attachment for now
     let color_attachment = AttachmentDescription {
         format: format.format,
