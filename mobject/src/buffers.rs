@@ -18,15 +18,9 @@ use ash::{Device, Instance};
 pub fn create_frame_buffers(
     device: &Device,
     render_pass: RenderPass,
-    swapchain_image_views: &[ImageView],
-    depth_image: ImageView,
+    attachments: Vec<Vec<ImageView>>,
     extent: Extent2D,
 ) -> Vec<Framebuffer> {
-    // preserving attachments until `create_frame_buffers` is called
-    let attachments: Vec<[ImageView; 2]> = swapchain_image_views
-        .iter()
-        .map(|img| [*img, depth_image])
-        .collect();
     let framebuffer_infos: Vec<FramebufferCreateInfo> = attachments
         .iter()
         .map(|attachments| FramebufferCreateInfo {

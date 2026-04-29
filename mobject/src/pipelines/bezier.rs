@@ -79,6 +79,7 @@ impl BezierPipeline {
             vertex_binding_description: Self::vertex_binding_description(),
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::PATCH_LIST,
+            color_attachment_count: 1,
             render_pass,
             // use to index texture element
             push_constant: Some(
@@ -87,7 +88,8 @@ impl BezierPipeline {
                     offset: 0,
                     size: 4
                 }
-            )
+            ),
+            rasterization_info: shaders::rasterization_create_info()
         };
         let (pipeline, layout) = pipelines::create_graphics_pipeline(
             logical_device,

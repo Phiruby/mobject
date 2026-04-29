@@ -13,7 +13,7 @@ pub fn shadow_render_pass(device: &Device, shadow_depth_format: vk::Format) -> R
         stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
         stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
         initial_layout: vk::ImageLayout::UNDEFINED,
-        final_layout: vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         ..Default::default()
     };
     let depth_reference = AttachmentReference {
@@ -27,7 +27,18 @@ pub fn shadow_render_pass(device: &Device, shadow_depth_format: vk::Format) -> R
         ..Default::default()
     };
     let dependencies = vec![
-        SubpassDependency {
+        vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::FRAGMENT_SHADER, // Where it was last used (reading)
+            dst_stage_mask: vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS, // Where it will be used now
+            src_access_mask: vk::AccessFlags::SHADER_READ,
+            dst_access_mask: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dependency_flags: vk::DependencyFlags::BY_REGION,
+        },
+        // 2. Dependency for the END of the pass
+        // Transitions from DEPTH_STENCIL_ATTACHMENT_OPTIMAL (Subpass 0) to SHADER_READ_ONLY_OPTIMAL (EXTERNAL)
+        vk::SubpassDependency {
             src_subpass: 0,
             dst_subpass: vk::SUBPASS_EXTERNAL,
             src_stage_mask: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,

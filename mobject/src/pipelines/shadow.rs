@@ -7,7 +7,7 @@ use crate::scene::{Mobject, Texture};
 use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 use crate::pipelines::{self, CompletePipeline};
-pub struct PrimitivePipeline {
+pub struct ShadowMapping {
     // device: &'a Device,
     extent: Extent2D,
     pub vertex_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
@@ -18,21 +18,19 @@ pub struct PrimitivePipeline {
     uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     uniform_buffer_mapped_memories: [*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
-    framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_set_layout: DescriptorSetLayout,
     mobject_descriptor_pool: DescriptorPool,
     pipeline: Pipeline,
     pipeline_layout: PipelineLayout
 }
 
-impl PrimitivePipeline {
+impl ShadowMapping {
     pub fn new(
         logical_device: &Device,
         nvertices: usize,
         nindices: usize,
         // TODO: the pipeline should create its own render pass?
         render_pass: RenderPass,
-        framebuffers: [Framebuffer; 3],
         scene_descriptor_layout: DescriptorSetLayout,
         extent: Extent2D,
         physical_device_memory_properties: PhysicalDeviceMemoryProperties,
@@ -70,14 +68,14 @@ impl PrimitivePipeline {
 
         let pipeline_info = CompletePipeline {
             extent,
-            vertex_path: "shaders/vert.spv",
-            fragment_path: "shaders/frag.spv",
+            vertex_path: "shaders/shadow/vert.spv",
+            fragment_path: "shaders/shadow/frag.spv",
             tesc_path: None,
             tese_path: None,
             vertex_binding_description: Self::vertex_binding_description(),
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::TRIANGLE_LIST,
-            color_attachment_count: 1,
+            color_attachment_count: 0,
             render_pass,
             // use to index texture element
             push_constant: Some(
@@ -87,7 +85,7 @@ impl PrimitivePipeline {
                     size: 4
                 }
             ),
-            rasterization_info: shaders::rasterization_create_info()
+            rasterization_info: shaders::shadow_rasterization_create_info()
         };
         let (pipeline, layout) = pipelines::create_graphics_pipeline(
             logical_device,
@@ -107,59 +105,11 @@ impl PrimitivePipeline {
             uniform_buffer_memories,
             uniform_buffer_mapped_memories: ubo_mapped_memories,
             render_pass,
-            framebuffers,
             mobject_descriptor_set_layout,
             mobject_descriptor_pool,
             pipeline,
             pipeline_layout: layout
         }
-    }
-
-    pub fn create_mobject_descriptor_sets(
-        &self,
-        device: &Device,
-        uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-    ) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
-        let layouts = [
-            self.mobject_descriptor_set_layout;
-            MAX_FRAMES_IN_FLIGHT as usize
-        ];
-        let alloc_info = DescriptorSetAllocateInfo {
-            s_type: StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
-            descriptor_pool: self.mobject_descriptor_pool,
-            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
-            p_set_layouts: layouts.as_ptr(),
-            ..Default::default()
-        };
-        let descriptor_sets = unsafe {
-            device.allocate_descriptor_sets(&alloc_info)
-            .unwrap()
-        };
-        (0..MAX_FRAMES_IN_FLIGHT)
-            .for_each(|i| {
-                let uniform_buffer_info = DescriptorBufferInfo {
-                    buffer: uniform_buffers[i as usize],
-                    offset: 0,
-                    range: vk::WHOLE_SIZE
-                };
-                let write_op = [
-                    WriteDescriptorSet {
-                        s_type: StructureType::WRITE_DESCRIPTOR_SET,
-                        dst_set: descriptor_sets[i as usize],
-                        dst_binding: 0,
-                        dst_array_element: 0,
-                        descriptor_type: DescriptorType::UNIFORM_BUFFER,
-                        descriptor_count: 1,
-                        p_buffer_info: &uniform_buffer_info,
-                        ..Default::default()
-                    }
-                ];
-                unsafe {
-                    device.update_descriptor_sets(&write_op, &[]);
-                }
-            });
-        descriptor_sets.try_into().unwrap()
-
     }
     pub fn draw_frame(
         &self,
@@ -167,10 +117,8 @@ impl PrimitivePipeline {
         cmd_buffer: CommandBuffer,
         frame_index: usize,
         scene_descriptor_set: DescriptorSet,
-        // TODO: annotate with primitive trait as well
         mobjects: &[&Box<dyn BuiltShape>],
         mobject_descriptor_sets: &[DescriptorSet],
-        texture_indices: &HashMap<String, Texture>
     ) {
 
         unsafe {
@@ -189,14 +137,14 @@ impl PrimitivePipeline {
         unsafe {
             device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline_layout, 0, &[scene_descriptor_set], &[])
         };
-
-        pipelines::bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets, texture_indices);
+        pipelines::bind_mobject_shadow(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets);
     }
 
     /// Fills the index, vertex, and uniform buffers
     pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[RenderVertex], indices: &[u32], mobjects: &[&Mobject]) {
         window::fill_vertex_buffer(device, self.vertex_buffer_memories[frame_index], vertices);
         window::fill_index_buffer(device, self.index_buffer_memories[frame_index], indices);
+        // for model matrix
         mobjects
             .iter()
             .for_each(|mobj| {

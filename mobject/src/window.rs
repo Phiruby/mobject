@@ -4,8 +4,7 @@ use std::ptr::copy_nonoverlapping;
 use crate::shapes::RenderVertex;
 use crate::MAX_FRAMES_IN_FLIGHT;
 use ash::vk::{
-    DeviceMemory,
-    MemoryMapFlags,
+    AccessFlags, DeviceMemory, ImageLayout, ImageMemoryBarrier, MemoryMapFlags
 };
 use ash::Device;
 use ash::{
@@ -40,6 +39,31 @@ pub struct Sync {
     pub image_available: Semaphore,
     pub render_finished: Semaphore,
     pub in_flight: Fence,
+}
+
+pub fn create_image_barriers<'a>(
+    shadow_images: &[vk::Image],
+) -> Vec<ImageMemoryBarrier<'a>> {
+    let mut barriers: Vec<ImageMemoryBarrier> = Vec::new();
+    for i in 0..shadow_images.len() {
+        let shadow_barrier = vk::ImageMemoryBarrier {
+        old_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        src_access_mask: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+        dst_access_mask: vk::AccessFlags::SHADER_READ,
+        image: shadow_images[i],
+        subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::DEPTH,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        };
+        barriers.push(shadow_barrier);
+    }
+    barriers
 }
 
 pub fn create_sync_objects(device: &Device) -> Vec<Sync> {

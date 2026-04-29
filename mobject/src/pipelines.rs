@@ -1,10 +1,11 @@
 pub mod primitive;
 pub mod bezier;
+pub mod shadow;
 use std::collections::HashMap;
 use std::ffi::CString;
 pub use primitive::PrimitivePipeline;
 pub use bezier::BezierPipeline;
-use ash::vk::{self, CommandBuffer, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, Extent2D, GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
+use ash::vk::{self, CommandBuffer, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, Extent2D, GraphicsPipelineCreateInfo, Offset2D, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport};
 use ash::Device;
 use crate::scene::Texture;
 use crate::shapes::{BuiltShape};
@@ -29,6 +30,8 @@ struct CompletePipeline<'a> {
     vertex_attribute_description: Vec<VertexInputAttributeDescription>,
     topology: PrimitiveTopology,
     render_pass: RenderPass,
+    color_attachment_count: u32,
+    rasterization_info: PipelineRasterizationStateCreateInfo<'a>,
     push_constant: Option<PushConstantRange>
 }
 
@@ -47,6 +50,26 @@ fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> Shader
         ..Default::default()
     };
     unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
+}
+
+fn bind_mobject_shadow(
+    device: &Device,
+    cmd_buffer: CommandBuffer,
+    pipeline_layout: PipelineLayout,
+    mobjects: &[&Box<dyn BuiltShape>],
+    mobject_descriptor_sets: &[DescriptorSet]
+) {
+    let mut cummulative_indices = 0;
+    for (&descriptor_set, mobj) in mobject_descriptor_sets.iter().zip(mobjects.iter()) {
+        unsafe {
+            device.cmd_bind_descriptor_sets(cmd_buffer, PipelineBindPoint::GRAPHICS, pipeline_layout, 1, &[descriptor_set], &[])
+        };
+        let nindices = mobj.indices().len() as u32;
+        unsafe {
+            device.cmd_draw_indexed(cmd_buffer, nindices, 1, cummulative_indices, 0, 0)
+        };
+        cummulative_indices += nindices;
+    }
 }
 
 fn bind_mobject_descriptor_sets(
@@ -192,7 +215,7 @@ fn create_graphics_pipeline(
         p_scissors: &sciccors,
         ..Default::default()
     };
-    let rasterizatio_info = shaders::rasterization_create_info();
+    let rasterizatio_info = pipeline_info.rasterization_info;
     let multisample_info = shaders::multisampling_create_info();
     let color_attachment = PipelineColorBlendAttachmentState {
         color_write_mask: vk::ColorComponentFlags::RGBA,
@@ -202,7 +225,7 @@ fn create_graphics_pipeline(
     let color_blend_info = PipelineColorBlendStateCreateInfo {
         s_type: StructureType::PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         logic_op_enable: vk::FALSE,
-        attachment_count: 1,
+        attachment_count: pipeline_info.color_attachment_count,
         logic_op: vk::LogicOp::COPY,
         p_attachments: &color_attachment,
         blend_constants: [0.0, 0.0, 0.0, 0.0],

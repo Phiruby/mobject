@@ -38,6 +38,17 @@ pub fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'
     }
 }
 
+pub fn shadow_rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
+    PipelineRasterizationStateCreateInfo {
+        s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        depth_clamp_enable: vk::FALSE,
+        depth_bias_enable: vk::TRUE,
+        depth_bias_constant_factor: 1.25,
+        depth_bias_slope_factor: 1.75,
+        ..rasterization_create_info()
+    }
+}
+
 pub fn multisampling_create_info<'a>() -> PipelineMultisampleStateCreateInfo<'a> {
     PipelineMultisampleStateCreateInfo {
         s_type: StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
@@ -85,6 +96,10 @@ pub fn scene_descriptor_pool(
         DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             descriptor_count: MAX_FRAMES_IN_FLIGHT * 10
+        },
+        DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT
         }
     ];
     let pool_info = DescriptorPoolCreateInfo {
