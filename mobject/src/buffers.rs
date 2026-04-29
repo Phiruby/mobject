@@ -222,6 +222,7 @@ pub fn create_depth_buffer(
     logical_device: &Device,
     physical_device: PhysicalDevice,
     extent: Extent2D,
+    usage: ImageUsageFlags,
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
 ) -> (Image, ImageView, DeviceMemory, Format) {
     let depth_format = find_depth_buffer_format(
@@ -242,7 +243,7 @@ pub fn create_depth_buffer(
         1,
         depth_format,
         ImageTiling::OPTIMAL,
-        ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        usage,
         MemoryPropertyFlags::DEVICE_LOCAL,
         physical_device_memory_properties,
     );

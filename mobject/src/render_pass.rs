@@ -4,6 +4,52 @@ use ash::vk::{
     StructureType, SubpassDependency, SubpassDescription, SurfaceFormatKHR,
 };
 
+pub fn shadow_render_pass(device: &Device, shadow_depth_format: vk::Format) -> RenderPass {
+    let depth_attachment = AttachmentDescription {
+        format: shadow_depth_format,
+        samples: vk::SampleCountFlags::TYPE_1,
+        load_op: vk::AttachmentLoadOp::CLEAR,
+        store_op: vk::AttachmentStoreOp::STORE,
+        stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+        stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+        initial_layout: vk::ImageLayout::UNDEFINED,
+        final_layout: vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        ..Default::default()
+    };
+    let depth_reference = AttachmentReference {
+        attachment: 0,
+        layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    let spd = SubpassDescription {
+        pipeline_bind_point: PipelineBindPoint::GRAPHICS,
+        color_attachment_count: 0,
+        p_depth_stencil_attachment: &depth_reference,
+        ..Default::default()
+    };
+    let dependencies = vec![
+        SubpassDependency {
+            src_subpass: 0,
+            dst_subpass: vk::SUBPASS_EXTERNAL,
+            src_stage_mask: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+            dst_stage_mask: vk::PipelineStageFlags::FRAGMENT_SHADER,
+            src_access_mask: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dst_access_mask: vk::AccessFlags::SHADER_READ,
+            dependency_flags: vk::DependencyFlags::BY_REGION,
+        },
+    ];
+    let rp_info = RenderPassCreateInfo {
+        s_type: StructureType::RENDER_PASS_CREATE_INFO,
+        attachment_count: 1,
+        p_attachments: &depth_attachment,
+        subpass_count: 1,
+        p_subpasses: &spd,
+        dependency_count: dependencies.len() as u32,
+        p_dependencies: dependencies.as_ptr(),
+        ..Default::default()
+    };
+    unsafe { device.create_render_pass(&rp_info, None) }.unwrap()
+}
+
 pub fn create(format: SurfaceFormatKHR, device: &Device, depth_format: vk::Format) -> RenderPass {
     // fragment shader will only output color (layout 0 is color); so just color attachment for now
     let color_attachment = AttachmentDescription {

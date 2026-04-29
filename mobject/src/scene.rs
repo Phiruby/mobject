@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageUsageFlags, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -104,9 +104,14 @@ pub struct Scene {
     command_buffer: Vec<CommandBuffer>,
     render_pass: RenderPass,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
+    // TODO: confirm if these three are needed
     depth_image: Image,
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
+    // Same with these three as well
+    shadow_depth_image: Image,
+    shadow_depth_image_view: ImageView,
+    shadow_depth_image_memory: DeviceMemory,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobjects: Vec<Mobject>,
@@ -118,6 +123,7 @@ pub struct Scene {
     extent: Extent2D,
     textures: HashMap<String, Texture>,
     texture_sampler: Sampler,
+    shadow_sampler: Sampler,
     queue_families: QueueFamilies,
     global_ubo: GlobalUBO,
     physical_device_properties: PhysicalDeviceMemoryProperties,
@@ -164,7 +170,6 @@ impl Scene {
             extent,
         );
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
-        println!("{:?} <-- total swapchain images", swapchain_images.len());
         let swapchain_imageviews = swapchain::create_image_views(
             &logical_device,
             &swapchain_images,
@@ -194,17 +199,31 @@ impl Scene {
                 &logical_device,
                 physical_device,
                 extent,
+                ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
                 physical_device_memory_properties,
             );
-        let render_pass = render_pass::create(surface_format, &logical_device, depth_image_format);
+
+        let (shadow_depth_image, shadow_depth_image_view, shadow_depth_image_memory, shadow_depth_image_format) = buffers::create_depth_buffer(
+            &instance,
+            &logical_device,
+            physical_device,
+            extent,
+            ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | ImageUsageFlags::SAMPLED,
+            physical_device_memory_properties,
+        );
+        let main_render_pass = render_pass::create(surface_format, &logical_device, depth_image_format);
+        let shadow_render_pass = render_pass::shadow_render_pass(&logical_device, depth_image_format);
+
         let framebuffers = buffers::create_frame_buffers(
             &logical_device,
-            render_pass,
+            main_render_pass,
             &swapchain_imageviews,
             depth_image_view,
             extent,
         );
         let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
+        let shadow_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
+
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [
@@ -249,9 +268,9 @@ impl Scene {
 
         let primitive_pipeline = pipelines::PrimitivePipeline::new(
             &logical_device,
-            100000,
-            100000,
-            render_pass,
+            10000,
+            10000,
+            main_render_pass,
             framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(),
             scene_descriptor_set_layout,
             extent,
@@ -262,7 +281,7 @@ impl Scene {
             &logical_device,
             10000,
             10000,
-            render_pass,
+            main_render_pass,
             framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(), scene_descriptor_set_layout,
             extent,
             physical_device_memory_properties
@@ -288,15 +307,19 @@ impl Scene {
             window,
             command_buffer,
             swapchain,
-            render_pass,
+            render_pass: main_render_pass,
             depth_image,
             depth_image_view,
             depth_image_memory,
+            shadow_depth_image,
+            shadow_depth_image_view,
+            shadow_depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
             extent,
             textures: HashMap::new(),
             texture_sampler,
+            shadow_sampler,
             queue_families,
             // TODO: projection can even be moved to a constant ubo
             global_ubo: GlobalUBO {
