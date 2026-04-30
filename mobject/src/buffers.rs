@@ -15,10 +15,14 @@ use ash::vk::{
 };
 use ash::{Device, Instance};
 
-pub fn create_frame_buffers(
+/// Creates framebuffers for each attachment passed.
+/// The `attachments` is a vector that contains the N attachments
+/// used per framebuffer. This is particularly useful when you are trying to create a resource
+/// per image in flight; so pass in vector of size M to create M framebuffers
+pub fn create_frame_buffers<const N: usize>(
     device: &Device,
     render_pass: RenderPass,
-    attachments: Vec<Vec<ImageView>>,
+    attachments: Vec<[ImageView; N]>,
     extent: Extent2D,
 ) -> Vec<Framebuffer> {
     let framebuffer_infos: Vec<FramebufferCreateInfo> = attachments

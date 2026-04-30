@@ -88,6 +88,8 @@ impl GraphicsPipeline for BezierPipeline {
 impl BezierPipeline {
     pub fn new(
         logical_device: &Device,
+        swapchain_image_views: &[vk::ImageView],
+        depth_image_view: vk::ImageView,
         nvertices: usize,
         nindices: usize,
         scene_descriptor_layout: DescriptorSetLayout,
@@ -96,7 +98,23 @@ impl BezierPipeline {
         depth_format: vk::Format,
         physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     ) -> Self {
-       Self { state: PipelineState::new::<BezierPipeline>(logical_device, nvertices, nindices, scene_descriptor_layout, extent, surface_format, depth_format,  physical_device_memory_properties) }
+        let render_pass = Self::render_pass(logical_device, extent, depth_format, surface_format);
+        let attachments = swapchain_image_views.iter().map(|&image_view| [image_view, depth_image_view]).collect();
+        let framebuffers = buffers::create_frame_buffers(logical_device, render_pass, attachments, extent);
+        Self {
+            state: PipelineState::new::<BezierPipeline>(
+                logical_device,
+                nvertices,
+                nindices,
+                scene_descriptor_layout,
+                render_pass,
+                framebuffers.try_into().unwrap(),
+                extent,
+                surface_format,
+                depth_format,
+                physical_device_memory_properties
+            )
+        }
     }
 
     pub fn draw_frame(

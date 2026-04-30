@@ -258,8 +258,9 @@ impl<'a> Scene<'a> {
         let sync = window::create_sync_objects(&logical_device);
         let shadow_barriers = window::create_image_barriers(&shadow_depth_image);
 
-        let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
-        let shadow_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
+        let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device,
+        vk::FALSE, vk::CompareOp::ALWAYS);
+        let shadow_sampler = texture::create_sampler(&logical_device, &instance, physical_device, vk::TRUE, vk::CompareOp::LESS);
 
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
@@ -349,11 +350,14 @@ impl<'a> Scene<'a> {
 
         let bezier_pipeline = pipelines::BezierPipeline::new(
             &logical_device,
+            &swapchain_imageviews,
+            depth_image_view,
             10000,
             10000,
-            main_render_pass,
-            framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(), scene_descriptor_set_layout,
+            scene_descriptor_set_layout,
             extent,
+            surface_format,
+            depth_image_format,
             physical_device_memory_properties
         );
 
@@ -374,7 +378,7 @@ impl<'a> Scene<'a> {
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);
         let light_view = glm::look_at(
-            &glm::vec3(5.0, 5.0, 2.0), &glm::vec3( 0.0, 0.0,  0.0), &glm::vec3( 0.0, 0.0,  1.0)
+            &glm::vec3(3.0, 3.0, 4.0), &glm::vec3( 0.0, 0.0,  0.0), &glm::vec3( 0.0, 0.0,  1.0)
         );
         let light_projection = glm::ortho_zo(-10.0, 10.0, -10.0, 10.0, 0.1, 17.5);
         dbg!(light_projection * light_view);

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 pub use primitive::PrimitivePipeline;
 pub use bezier::BezierPipeline;
-use ash::vk::{self, Buffer, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
+use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
 use core::ffi::c_void;
@@ -47,7 +47,7 @@ struct PipelineState {
     uniform_buffer_mapped_memories: [*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
     // TODO: move framebuffers to pipeline level
-    // framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
+    framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
     mobject_descriptor_set_layout: DescriptorSetLayout,
     mobject_descriptor_pool: DescriptorPool,
     pipeline: Pipeline,
@@ -69,6 +69,8 @@ impl PipelineState {
         nvertices: usize,
         nindices: usize,
         scene_descriptor_layout: DescriptorSetLayout,
+        render_pass: RenderPass,
+        framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
         extent: Extent2D,
         surface_format: SurfaceFormatKHR,
         depth_format: vk::Format,
@@ -82,7 +84,6 @@ impl PipelineState {
         let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, std::mem::size_of::<UBO>() as u64);
 
         let complete_pipeline = P::get_pipeline_info(logical_device, extent, depth_format, surface_format);
-        let render_pass = P::render_pass(logical_device, extent, depth_format, surface_format);
         let mobject_descriptor_set_layout = P::mobject_descriptor_set_layout(logical_device);
         let mobject_descriptor_pool = P::mobject_descriptor_pool(logical_device);
         let (pipeline, pipeline_layout) = create_graphics_pipeline(logical_device, extent, complete_pipeline, render_pass, mobject_descriptor_set_layout, scene_descriptor_layout);
@@ -96,7 +97,7 @@ impl PipelineState {
             uniform_buffer_memories,
             uniform_buffer_mapped_memories: ubo_mapped_memories,
             render_pass,
-            // framebuffers,
+            framebuffers,
             mobject_descriptor_set_layout,
             mobject_descriptor_pool,
             pipeline,
@@ -160,6 +161,32 @@ impl PipelineState {
         mobject_descriptor_sets: &[DescriptorSet],
         texture_indices: &HashMap<String, Texture>,
     ) {
+        let clear_colors = [
+            ClearValue {
+                color: ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0]
+                },
+            },
+            ClearValue {
+                depth_stencil: ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0
+                }
+            }
+        ];
+        let render_pass_begin_info = RenderPassBeginInfo {
+            s_type: StructureType::RENDER_PASS_BEGIN_INFO,
+            render_pass: self.render_pass,
+            framebuffer: self.framebuffers[frame_index],
+            render_area: Rect2D { offset: Offset2D { x: 0, y: 0 }, extent: self.extent },
+            clear_value_count: clear_colors.len() as u32,
+            p_clear_values: clear_colors.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            device.cmd_begin_render_pass(cmd_buffer, &render_pass_begin_info, SubpassContents::INLINE)
+        };
         unsafe {
             device.cmd_bind_pipeline(cmd_buffer, PipelineBindPoint::GRAPHICS, self.pipeline)
         };
