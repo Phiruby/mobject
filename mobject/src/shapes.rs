@@ -35,6 +35,7 @@ pub struct GlobalUBO {
     pub _pad: u32, // 4 bytes of padding, because std140 rule states vec3 takes 16 bytes...
     pub view: glm::Mat4,
     pub proj: glm::Mat4,
+    pub light_space: glm::Mat4,
 }
 
 pub trait Vertex<const N: usize> {

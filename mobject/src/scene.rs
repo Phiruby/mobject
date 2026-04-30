@@ -1,13 +1,14 @@
 use ash::vk::{
-    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Format, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageUsageFlags, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
 use crate::device::QueueFamilies;
+use crate::pipelines::shadow::ShadowMapping;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm as glm;
-use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, Shape, primitives};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, RenderVertex, Shape, primitives};
 use std::collections::{HashMap, VecDeque};
 use cgmath::Vector3;
 use std::ffi::{CString, c_void};
@@ -97,16 +98,18 @@ pub struct Scene {
     state: SceneState,
     actions: VecDeque<Action>,
     sync: Vec<window::Sync>,
+    // shadow_barriers: Vec<ImageMemoryBarrier<'a>>,
     device: Device,
     swapchain_device: khr::swapchain::Device,
     window: PWindow,
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
-    render_pass: RenderPass,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
+    // TODO: confirm if these three are needed
     depth_image: Image,
     depth_image_view: ImageView,
     depth_image_memory: DeviceMemory,
+    // Same with these three as well
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobjects: Vec<Mobject>,
@@ -123,9 +126,10 @@ pub struct Scene {
     physical_device_properties: PhysicalDeviceMemoryProperties,
     primitive_pipeline: PrimitivePipeline,
     bezier_pipeline: BezierPipeline,
+    shadow_pipeline: ShadowMapping,
     graphics_queue: Queue,
     cmd_pool: CommandPool,
-    framebuffers: Vec<Framebuffer>,
+    // shadow_framebuffer: Vec<Framebuffer>,
 
     solver: PBDSolver,
     spatial_hash: SpatialHash3D<Vec<(MobjectId, usize)>>
@@ -164,7 +168,6 @@ impl Scene {
             extent,
         );
         let swapchain_images = swapchain::acquire_images(swapchain, &swapchain_device);
-        println!("{:?} <-- total swapchain images", swapchain_images.len());
         let swapchain_imageviews = swapchain::create_image_views(
             &logical_device,
             &swapchain_images,
@@ -176,7 +179,6 @@ impl Scene {
         let pool = buffers::create_command_pool(&logical_device, &queue_families);
         let command_buffer =
             buffers::create_command_buffers(pool, &logical_device, MAX_FRAMES_IN_FLIGHT);
-        let sync = window::create_sync_objects(&logical_device);
         let physical_device_memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let graphics_queue =
@@ -194,17 +196,15 @@ impl Scene {
                 &logical_device,
                 physical_device,
                 extent,
+                ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
                 physical_device_memory_properties,
             );
-        let render_pass = render_pass::create(surface_format, &logical_device, depth_image_format);
-        let framebuffers = buffers::create_frame_buffers(
-            &logical_device,
-            render_pass,
-            &swapchain_imageviews,
-            depth_image_view,
-            extent,
-        );
-        let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device);
+
+        let sync = window::create_sync_objects(&logical_device);
+        // let shadow_barriers = window::create_image_barriers(&shadow_depth_image);
+
+        let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device,
+        vk::FALSE, vk::CompareOp::ALWAYS);
         let scene_descriptor_set_layout = shaders::create_description_set_layout(
             &logical_device,
             [
@@ -221,13 +221,21 @@ impl Scene {
                     descriptor_count: 10,
                     stage_flags: ShaderStageFlags::FRAGMENT,
                     ..Default::default()
-                }
+                },
+                DescriptorSetLayoutBinding {
+                    binding: 2,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                },
             ]
             .to_vec(),
             Some(
                 [
                     DescriptorBindingFlags::empty(),
-                    DescriptorBindingFlags::PARTIALLY_BOUND | DescriptorBindingFlags::UPDATE_AFTER_BIND
+                    DescriptorBindingFlags::PARTIALLY_BOUND | DescriptorBindingFlags::UPDATE_AFTER_BIND,
+                    DescriptorBindingFlags::empty(),
                 ]
                 .to_vec()
             ),
@@ -249,31 +257,50 @@ impl Scene {
 
         let primitive_pipeline = pipelines::PrimitivePipeline::new(
             &logical_device,
-            100000,
-            100000,
-            render_pass,
-            framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(),
+            &swapchain_imageviews,
+            depth_image_view,
+            10000,
+            10000,
             scene_descriptor_set_layout,
             extent,
+            surface_format,
+            depth_image_format,
             physical_device_memory_properties
         );
 
         let bezier_pipeline = pipelines::BezierPipeline::new(
             &logical_device,
+            &swapchain_imageviews,
+            depth_image_view,
             10000,
             10000,
-            render_pass,
-            framebuffers.iter().copied().collect::<Vec<Framebuffer>>().try_into().unwrap(), scene_descriptor_set_layout,
+            scene_descriptor_set_layout,
             extent,
+            surface_format,
+            depth_image_format,
             physical_device_memory_properties
         );
 
-        // let mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]> = Vec::new();
-
-        let camera_position = glm::vec3(2.0, 2.0, 2.0);
+        let shadow_pipeline = ShadowMapping::new(
+            &logical_device,
+            physical_device,
+            &instance,
+            10000,
+            10000,
+            scene_descriptor_set_layout,
+            &scene_descriptor_sets,
+            extent,
+            surface_format,
+            physical_device_memory_properties
+        );
+        let camera_position = glm::vec3(-2.0, -2.0, 2.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);
+        let light_view = glm::look_at(
+            &glm::vec3(3.0, 3.0, 4.0), &glm::vec3( 0.0, 0.0,  0.0), &glm::vec3( 0.0, 0.0,  1.0)
+        );
+        let light_projection = glm::ortho_zo(-10.0, 10.0, -10.0, 10.0, 0.1, 17.5);
         Self {
             state: SceneState::Moving,
             actions: VecDeque::new(),
@@ -288,7 +315,6 @@ impl Scene {
             window,
             command_buffer,
             swapchain,
-            render_pass,
             depth_image,
             depth_image_view,
             depth_image_memory,
@@ -309,14 +335,14 @@ impl Scene {
                     0.1,
                     10.0,
                 )),
+                light_space: light_projection * light_view
             },
             physical_device_properties: physical_device_memory_properties,
             primitive_pipeline,
             bezier_pipeline,
+            shadow_pipeline,
             graphics_queue,
             cmd_pool: pool,
-            framebuffers,
-
             solver: PBDSolver(),
             spatial_hash: SpatialHash3D::new((50, 50, 50), Vec::new, SPATIAL_HASH_SIZE)
                 .set_bottom_left(BOTTOM_LEFT)
@@ -495,7 +521,6 @@ impl Scene {
     }
 
     fn draw_frame(&mut self, graphics_queue: Queue, present_queue: Queue, current_frame: usize) {
-
         let sync = &self.sync[current_frame];
         let command_buffer = self.command_buffer[current_frame];
 
@@ -506,6 +531,32 @@ impl Scene {
         .unwrap();
         unsafe { self.device.reset_fences(&[sync.in_flight]) }.unwrap();
 
+        unsafe {
+            self.device
+                .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
+        }
+        .unwrap();
+
+        let cmd_begin_info = CommandBufferBeginInfo {
+                s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                ..Default::default()
+            };
+
+        unsafe { self.device.begin_command_buffer(command_buffer, &cmd_begin_info) }.unwrap();
+        window::fill_uniform_buffer(
+            self.uniform_buffer_mapped_memories[current_frame],
+            &self.global_ubo,
+        );
+
+        let (image_index, _suboptimal) = unsafe {
+            self.swapchain_device.acquire_next_image(
+                self.swapchain,
+                u64::MAX,
+                sync.image_available,
+                Fence::null(),
+            )
+        }
+        .unwrap();
         // animations and any object updates will be here
         let (mobjects, animations) = (&mut self.mobjects, &mut self.animations);
 
@@ -535,61 +586,25 @@ impl Scene {
         // TODO: move out of this struct
         let grouped_mobjects = Scene::group_mobjects(&self.mobjects);
 
+        let mj = self.mobjects.iter().map(|v| v).collect::<Vec<&Mobject>>();
+        let (vertices, indices) = shapes::mobjects_to_vertices_and_indices(&mj);
+        self.shadow_pipeline.fill_buffers(current_frame, &self.device, &vertices, &indices, &mj);
+
+        let desc_sets: Vec<DescriptorSet> = mj.iter().map(|x| x.descriptor_sets[current_frame]).collect();
+        let mobs: Vec<&Box<dyn BuiltShape>> = mj.iter().map(|x| &x.mobject).collect();
+
+        self.shadow_pipeline.draw_frame(
+            &self.device,
+            command_buffer,
+            current_frame,
+            self.scene_descriptor_sets[current_frame],
+            &mobs,
+            &desc_sets
+        );
+
         for (&pipeline_kind, mobjs) in grouped_mobjects.iter() {
             self.draw_mobjects(current_frame, pipeline_kind, &mobjs);
         }
-
-        window::fill_uniform_buffer(
-            self.uniform_buffer_mapped_memories[current_frame],
-            &self.global_ubo,
-        );
-
-        let (image_index, _suboptimal) = unsafe {
-            self.swapchain_device.acquire_next_image(
-                self.swapchain,
-                u64::MAX,
-                sync.image_available,
-                Fence::null(),
-            )
-        }
-        .unwrap();
-        unsafe {
-            self.device
-                .reset_command_buffer(command_buffer, CommandBufferResetFlags::empty())
-        }
-        .unwrap();
-
-        let cmd_begin_info = CommandBufferBeginInfo {
-            s_type: StructureType::COMMAND_BUFFER_BEGIN_INFO,
-            ..Default::default()
-        };
-        unsafe { self.device.begin_command_buffer(command_buffer, &cmd_begin_info) }.unwrap();
-        let clear_colors = [
-            ClearValue {
-                color: ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0]
-                },
-            },
-            ClearValue {
-                depth_stencil: ClearDepthStencilValue {
-                    depth: 1.0,
-                    stencil: 0
-                }
-            }
-        ];
-        let render_pass_begin_info = RenderPassBeginInfo {
-            s_type: StructureType::RENDER_PASS_BEGIN_INFO,
-            render_pass: self.render_pass,
-            framebuffer: self.framebuffers[current_frame],
-            render_area: Rect2D { offset: Offset2D { x: 0, y: 0 }, extent: self.extent },
-            clear_value_count: clear_colors.len() as u32,
-            p_clear_values: clear_colors.as_ptr(),
-            ..Default::default()
-        };
-
-        unsafe {
-            self.device.cmd_begin_render_pass(command_buffer, &render_pass_begin_info, SubpassContents::INLINE)
-        };
 
         for (&pipeline_kind, mobjs) in grouped_mobjects.iter() {
             let mobs: Vec<&Box<dyn BuiltShape>> = mobjs.iter().map(|x| &x.mobject).collect();
@@ -616,7 +631,6 @@ impl Scene {
                 )
             };
         }
-        unsafe { self.device.cmd_end_render_pass(command_buffer) };
         unsafe { self.device.end_command_buffer(command_buffer)}.unwrap();
         // self.primitive_pipeline.draw_frame(
         //     &self.device, command_buffer, current_frame, self.scene_descriptor_sets[current_frame], &self.mobjects, &mobj_desc_sets, &self.textures);
@@ -656,6 +670,8 @@ impl Scene {
         }
         .unwrap();
     }
+
+
 }
 
 fn create_vk_instance(

@@ -15,18 +15,16 @@ use ash::vk::{
 };
 use ash::{Device, Instance};
 
-pub fn create_frame_buffers(
+/// Creates framebuffers for each attachment passed.
+/// The `attachments` is a vector that contains the N attachments
+/// used per framebuffer. This is particularly useful when you are trying to create a resource
+/// per image in flight; so pass in vector of size M to create M framebuffers
+pub fn create_frame_buffers<const N: usize>(
     device: &Device,
     render_pass: RenderPass,
-    swapchain_image_views: &[ImageView],
-    depth_image: ImageView,
+    attachments: Vec<[ImageView; N]>,
     extent: Extent2D,
 ) -> Vec<Framebuffer> {
-    // preserving attachments until `create_frame_buffers` is called
-    let attachments: Vec<[ImageView; 2]> = swapchain_image_views
-        .iter()
-        .map(|img| [*img, depth_image])
-        .collect();
     let framebuffer_infos: Vec<FramebufferCreateInfo> = attachments
         .iter()
         .map(|attachments| FramebufferCreateInfo {
@@ -222,6 +220,7 @@ pub fn create_depth_buffer(
     logical_device: &Device,
     physical_device: PhysicalDevice,
     extent: Extent2D,
+    usage: ImageUsageFlags,
     physical_device_memory_properties: PhysicalDeviceMemoryProperties,
 ) -> (Image, ImageView, DeviceMemory, Format) {
     let depth_format = find_depth_buffer_format(
@@ -242,7 +241,7 @@ pub fn create_depth_buffer(
         1,
         depth_format,
         ImageTiling::OPTIMAL,
-        ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        usage,
         MemoryPropertyFlags::DEVICE_LOCAL,
         physical_device_memory_properties,
     );

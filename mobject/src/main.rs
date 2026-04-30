@@ -26,11 +26,12 @@ fn main() {
     );
     let c = Box::new(Cloth::default().anchor(vec![0, 9, 90, 99]));
     let mut scene = Scene::new();
-    // scene.add_baseplate();
+    scene.add_baseplate();
     scene.wait(3);
     scene.add(c);
     scene.wait(3);
     scene.add(rect);
+    scene.wait(8);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
 
     // let rect = Box::new(
@@ -61,7 +62,7 @@ fn main() {
     // scene.wait(3);
     // let camera_motion = scene
     //     .camera()
-    //     .move_to(glm::make_vec3(&[4.0, 1.0, -5.0]))
+    //     .move_to(glm::make_vec3(&[4.0, 1.0, 0.75]))
     //     .with_duration(2.0);
 
     // scene.motion(camera_motion);
