@@ -11,6 +11,7 @@ use crate::scene::{Mobject, Texture};
 use core::ffi::c_void;
 use crate::shapes::{BuiltShape, RenderVertex, UBO};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, window};
+
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
 /// adhered. Each mobject implementing a specific pipeline is responsible
@@ -55,7 +56,7 @@ struct PipelineState {
 }
 
 trait GraphicsPipeline {
-    fn get_pipeline_info(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> CompletePipeline<'static>;
+    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static>;
     fn render_pass(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> RenderPass;
     fn vertex_binding_description() -> VertexInputBindingDescription;
     fn vertex_attribute_description() -> Vec<VertexInputAttributeDescription>;
@@ -83,7 +84,7 @@ impl PipelineState {
 
         let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, std::mem::size_of::<UBO>() as u64);
 
-        let complete_pipeline = P::get_pipeline_info(logical_device, extent, depth_format, surface_format);
+        let complete_pipeline = P::get_pipeline_info(render_pass, extent);
         let mobject_descriptor_set_layout = P::mobject_descriptor_set_layout(logical_device);
         let mobject_descriptor_pool = P::mobject_descriptor_pool(logical_device);
         let (pipeline, pipeline_layout) = create_graphics_pipeline(logical_device, extent, complete_pipeline, render_pass, mobject_descriptor_set_layout, scene_descriptor_layout);
@@ -205,6 +206,8 @@ impl PipelineState {
         };
 
         bind_mobject_descriptor_sets(device, cmd_buffer, self.pipeline_layout, mobjects, mobject_descriptor_sets, texture_indices);
+
+        unsafe { device.cmd_end_render_pass(cmd_buffer) };
     }
 
     pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[RenderVertex], indices: &[u32], mobjects: &[&Mobject]) {

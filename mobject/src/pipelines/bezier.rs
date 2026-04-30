@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ash::vk::{self, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
+use ash::vk::{self, Buffer, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
 use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
@@ -15,7 +15,8 @@ pub struct BezierPipeline {
 
 impl GraphicsPipeline for BezierPipeline {
 
-    fn get_pipeline_info(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> CompletePipeline<'static> {
+
+    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static> {
         CompletePipeline {
             extent,
             vertex_path: "shaders/bezier/vert.spv",
@@ -26,7 +27,7 @@ impl GraphicsPipeline for BezierPipeline {
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::PATCH_LIST,
             color_attachment_count: 1,
-            render_pass: Self::render_pass(device, extent, depth_format, surface_format),
+            render_pass,
             // use to index texture element
             push_constant: Some(
                 PushConstantRange {
@@ -132,5 +133,13 @@ impl BezierPipeline {
 
     pub fn fill_buffers(&self, frame_index: usize, device: &Device, vertices: &[RenderVertex], indices: &[u32], mobjects: &[&Mobject]) {
         self.state.fill_buffers(frame_index, device, vertices, indices, mobjects);
+    }
+
+    pub fn create_mobject_descriptor_sets(
+        &self,
+        device: &Device,
+        uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT as usize],
+    ) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
+        self.state.create_mobject_descriptor_sets(device, uniform_buffers)
     }
 }

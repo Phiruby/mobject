@@ -7,23 +7,6 @@ use ash::vk::{
 
 use crate::MAX_FRAMES_IN_FLIGHT;
 
-fn create_shader_module(shader_code: Vec<u8>, logical_device: &Device) -> ShaderModule {
-    let byte_code: Vec<u32> = shader_code
-        .chunks_exact(4)
-        .map(|chunk| {
-            let bytes: [u8; 4] = chunk.try_into().unwrap();
-            u32::from_ne_bytes(bytes)
-        })
-        .collect();
-    let shader_create_info = ShaderModuleCreateInfo {
-        s_type: StructureType::SHADER_MODULE_CREATE_INFO,
-        p_code: byte_code.as_ptr(),
-        code_size: shader_code.len(), // code size is in bytes, not the 4 bytes
-        ..Default::default()
-    };
-    unsafe { logical_device.create_shader_module(&shader_create_info, None) }.unwrap()
-}
-
 pub fn rasterization_create_info<'a>() -> PipelineRasterizationStateCreateInfo<'a> {
     PipelineRasterizationStateCreateInfo {
         s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -42,9 +25,9 @@ pub fn shadow_rasterization_create_info<'a>() -> PipelineRasterizationStateCreat
     PipelineRasterizationStateCreateInfo {
         s_type: StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         depth_clamp_enable: vk::FALSE,
-        depth_bias_enable: vk::TRUE,
-        depth_bias_constant_factor: 1.25,
-        depth_bias_slope_factor: 1.75,
+        depth_bias_enable: vk::FALSE,
+        // depth_bias_constant_factor: 1.25,
+        // depth_bias_slope_factor: 1.75,
         ..rasterization_create_info()
     }
 }

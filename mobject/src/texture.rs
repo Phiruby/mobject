@@ -307,6 +307,8 @@ pub fn create_sampler(
     logical_device: &Device,
     instance: &Instance,
     physical_device: PhysicalDevice,
+    compare_enable: vk::Bool32,
+    compare_op: vk::CompareOp,
 ) -> Sampler {
     let properties = unsafe { instance.get_physical_device_properties(physical_device) };
     let sampler_info = SamplerCreateInfo {
@@ -320,8 +322,10 @@ pub fn create_sampler(
         max_anisotropy: properties.limits.max_sampler_anisotropy,
         border_color: vk::BorderColor::INT_OPAQUE_BLACK,
         unnormalized_coordinates: vk::FALSE,
-        compare_enable: vk::FALSE,
-        compare_op: vk::CompareOp::ALWAYS,
+        // compare_enable: vk::FALSE,
+        // compare_op: vk::CompareOp::ALWAYS,
+        compare_enable: compare_enable,
+        compare_op: compare_op,
         mipmap_mode: vk::SamplerMipmapMode::LINEAR,
         mip_lod_bias: 0.0,
         min_lod: 0.0,

@@ -60,11 +60,11 @@ fn main() {
     // );
     // scene.play(anim);
     // scene.wait(3);
-    let camera_motion = scene
-        .camera()
-        .move_to(glm::make_vec3(&[4.0, 1.0, 0.75]))
-        .with_duration(2.0);
+    // let camera_motion = scene
+    //     .camera()
+    //     .move_to(glm::make_vec3(&[4.0, 1.0, 0.75]))
+    //     .with_duration(2.0);
 
-    scene.motion(camera_motion);
+    // scene.motion(camera_motion);
     scene.main_loop();
 }

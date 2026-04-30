@@ -4,7 +4,7 @@ use ash::vk::{
     StructureType, SubpassDependency, SubpassDescription, SurfaceFormatKHR,
 };
 
-pub fn shadow_render_pass(device: &Device, shadow_depth_format: vk::Format) -> RenderPass {
+pub fn shadow_mapping(device: &Device, shadow_depth_format: vk::Format) -> RenderPass {
     let depth_attachment = AttachmentDescription {
         format: shadow_depth_format,
         samples: vk::SampleCountFlags::TYPE_1,
