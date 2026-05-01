@@ -16,8 +16,9 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::{mem::offset_of, os::raw::c_void};
-use crate::physics::constraints::PhysicsConstraint;
+use crate::physics::constraints::{PhysicsConstraint, ShapeConstraint, StaticConstraint};
 use crate::pipelines::Pipelines;
 use crate::scene::Mobject;
 use crate::{MAX_FRAMES_IN_FLIGHT};
@@ -62,22 +63,78 @@ pub struct PhysicsVertex {
     // relevant for rigid bodies only. depends on obj's COM to get
     // world space.
     pub body_space_position: Vec3,
+    pub mobject_id: u32,
+}
+
+/// A wrapper during construction of a mobject:
+/// tells the Scene what the intent of the mobject is, such as
+/// whether it is rigid, which vertices are anchored, etc.
+pub struct ShapeIntent {
+    pub entity: Box<dyn Shape>,
+    pub constraints: Vec<PhysicsConstraint>,
+    pub inverse_masses: Vec<f32>,
+    pub velocities: Vec<Vec3>,
+}
+
+impl ShapeIntent {
+    pub fn new(entity: Box<dyn Shape>) -> Self {
+        let s = entity.get_vertices().len();
+        Self {
+            entity,
+            constraints: Vec::new(),
+            inverse_masses: vec![1.0; s],
+            velocities: vec![Vec3::new(0.0, 0.0, 0.0); s],
+        }
+    }
+    pub fn anchor(mut self, anchors: Vec<usize>) -> Self {
+        let verts = self.entity.get_vertices();
+        for i in anchors {
+            // NOTE: scene will fill pin_to
+            self.constraints.push(PhysicsConstraint::Static(StaticConstraint { inp_vertex_index: i, pin_to: verts[i].position }));
+            self.inverse_masses[i] = 0.0;
+        }
+        self
+    }
+    pub fn make_rigid(mut self) -> Self {
+        self.constraints.push(PhysicsConstraint::RigidBody(ShapeConstraint { }));
+        self
+    }
+    pub fn with_constraints(mut self, constraints: Vec<PhysicsConstraint>) -> Self {
+        self.constraints = constraints;
+        self
+    }
+    pub fn make_static(mut self) -> Self {
+        let s = self.entity.get_vertices().len();
+        self.anchor((0..s).collect())
+    }
+    pub fn with_velocities(mut self, velocities: Vec<Vec3>) -> Self {
+        self.velocities = velocities;
+        self
+    }
+    pub fn with_inverse_masses(mut self, inverse_masses: Vec<f32>) -> Self {
+        self.inverse_masses = inverse_masses;
+        self
+    }
 }
 
 impl PhysicsVertex {
-    pub fn new(position: Vec3) -> Self {
+    pub fn new(position: Vec3, mobj_id: u32) -> Self {
         Self {
             position,
             velocity: Vec3::new(0.0, 0.0, 0.0),
             w: 1.0,
             body_space_position: Vec3::new(0.0, 0.0, 0.0),
+            mobject_id: mobj_id
         }
     }
-    pub fn with_body_space_position(self, body_position: Vec3) -> Self {
-        Self {
-            body_space_position: body_position,
-            ..self
-        }
+    pub fn with_body_space_position(&mut self, body_position: Vec3) {
+        self.body_space_position = body_position;
+    }
+    pub fn set_velocity(&mut self, velocity: Vec3) {
+        self.velocity = velocity;
+    }
+    pub fn set_inv_mass(&mut self, inv_mass: f32) {
+        self.w = inv_mass;
     }
 }
 
@@ -179,7 +236,6 @@ pub trait ShapeConstruction {
     fn vertices2d(&self) -> &[RenderVertex] {
         self.get_vertices()
     }
-    fn get_mut_vertices_and_constraints(&mut self) -> (&mut [crate::shapes::PhysicsVertex], &[crate::physics::constraints::PhysicsConstraint]);
     fn get_vertices(&self) -> &[RenderVertex];
     fn indices(&self) -> &[u32];
     fn vertices_and_indices(&self) -> (&[RenderVertex], &[u32]) {
@@ -193,10 +249,11 @@ pub trait ShapeConstruction {
         &[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     );
     fn texture_path(&self) -> Option<&str>;
-    fn sync_phys_and_render_vertices(&mut self);
+    fn sync_phys_and_render_vertices(&mut self, physics_vertices: &[PhysicsVertex]);
     fn set_com(&mut self, com: Vec3);
-    fn get_physics_vertices(&self) -> &[crate::shapes::PhysicsVertex];
     fn update_spatial_hash(&self, space: &mut shapeject::SpatialHash3D<Vec<(u32, usize)>>, mid: u32);
+    fn set_physics_index_range(&mut self, start: usize, total: usize);
+    fn get_physics_index_range(&self) -> (usize, usize);
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}
@@ -208,6 +265,7 @@ pub trait Shape {
         mem_properties: PhysicalDeviceMemoryProperties,
     ) -> Box<dyn BuiltShape>;
     fn texture_path(&self) -> Option<&str>;
+    fn get_vertices(&self) -> &[RenderVertex];
 }
 
 pub fn mobjects_to_vertices_and_indices(

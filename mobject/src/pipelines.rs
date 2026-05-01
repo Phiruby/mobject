@@ -165,7 +165,7 @@ impl PipelineState {
         let clear_colors = [
             ClearValue {
                 color: ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0]
+                    float32: [0.529, 0.808, 0.922, 0.0]
                 },
             },
             ClearValue {

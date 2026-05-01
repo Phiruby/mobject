@@ -7,6 +7,7 @@ use nalgebra_glm::Vec3;
 use obj::{Obj, TexturedVertex, load_obj};
 use std::{os::raw::c_void};
 
+use crate::shapes::ShapeIntent;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
@@ -193,7 +194,7 @@ impl Default for Cube {
     }
 }
 
-pub fn create_baseplate() -> Box<dyn Shape> {
+pub fn create_baseplate() -> ShapeIntent {
     let width = 5.0;
     let depth = 0.1;
     let height = 5.0;
@@ -244,11 +245,9 @@ pub fn create_baseplate() -> Box<dyn Shape> {
         })
         .collect();
 
-    let b: Box<dyn Shape> = Box::new(
-        Cube::new()
-            .with_vertices(vertices)
-            .with_indices(indices)
-            .make_static()
-    );
-    b
+    Cube::new()
+        .with_vertices(vertices)
+        .with_indices(indices)
+        .finish_construction()
+        .make_static()
 }

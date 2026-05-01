@@ -8,8 +8,8 @@ use mobject::physics::constraints::{PhysicsConstraint, StaticConstraint, Stretch
 
 
 fn main() {
-    let rect = Box::new(
-        Cube::default()
+    let rect = Cube::default()
+        .finish_construction()
         .with_velocities(vec![
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(0.0, 0.0, 0.0),
@@ -22,13 +22,12 @@ fn main() {
         ])
         // .make_static()
         // .anchor(vec![0, 1])
-        .rigid_body()
-    );
-    let c = Box::new(Cloth::default().anchor(vec![0, 9, 90, 99]));
+        .make_rigid();
+    let c = Box::new(Cloth::default().finish_construction().anchor(vec![0, 9]));
     let mut scene = Scene::new();
     scene.add_baseplate();
-    scene.wait(3);
-    scene.add(c);
+    // scene.wait(3);
+    // scene.add(c);
     scene.wait(3);
     scene.add(rect);
     scene.wait(8);

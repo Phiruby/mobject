@@ -133,7 +133,7 @@ impl Default for Cloth {
             width,
             height,
             &positions,
-            0.5,
+            0.2,
         ));
 
         Self::new()
