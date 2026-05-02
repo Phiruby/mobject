@@ -47,7 +47,10 @@ pub struct StaticConstraint {
 
 /// Constraint to make a mobject a rigid body
 #[derive(Clone, Debug)]
-pub struct ShapeConstraint();
+pub struct ShapeConstraint {
+    pub start_physics_vertices_idx: usize,
+    pub total_physics_vertices: usize
+}
 
 // NOTE: this can be used for both continuous and static collisions
 // provided that the right arguments are passed (it is on the caller to compute the correct)
@@ -184,8 +187,8 @@ impl PhysicsConstraint {
             PhysicsConstraint::Static(i) => i.inp_vertex_index += offset,
             PhysicsConstraint::Stretch(i) => {i.vert_ind1 += offset; i.vert_ind2 += offset},
             PhysicsConstraint::Collision(i) => i.inp_vertex_index += offset,
-            PhysicsConstraint::RigidBody(_) => { },
-            PhysicsConstraint::Attachment(i) => panic!("Attachment constraints depend on multiple mobjects. Cannot add offset"),
+            PhysicsConstraint::RigidBody(i) => { i.start_physics_vertices_idx += offset;},
+            PhysicsConstraint::Attachment(_) => panic!("Attachment constraints depend on multiple mobjects. Cannot add offset"),
         }
     }
 }

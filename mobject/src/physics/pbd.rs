@@ -66,10 +66,16 @@ fn project_constraints(
     constraints: &[PhysicsConstraint],
 ) {
     for c in constraints {
-        let current_com = physics::raw_center_of_mass(world_positions, inv_masses);
         // TODO: hacking over rigid constraint
-        if let PhysicsConstraint::RigidBody(_) = c {
-            shape_matching(world_positions, current_com, body_positions, inv_masses);
+        if let PhysicsConstraint::RigidBody(x) = c {
+            let start = x.start_physics_vertices_idx;
+            let end = start + x.total_physics_vertices;
+
+            let wp = &mut world_positions[start..end];
+            let inv_mass: &[f32] = &inv_masses[start..end];
+            let current_com = physics::raw_center_of_mass(wp, inv_mass);
+            let bp: &[Vec3] = &body_positions[start..end];
+            shape_matching(wp, current_com, bp, inv_mass);
             continue;
         }
         let ev = c.evaluate(world_positions);
@@ -150,7 +156,7 @@ fn generate_collision_constraints(
                         PhysicsConstraint::Collision(CollisionConstraint {
                             inp_vertex_index: j,
                             q: q_c,
-                            n
+                            n: n
                         }
                     ));
                     // }
@@ -161,27 +167,32 @@ fn generate_collision_constraints(
 }
 
 fn dampen_velocities(
-    vertices: &mut [PhysicsVertex],
+    scene_vertices: &mut [PhysicsVertex],
+    mobjects: &[Mobject],
     k_damping: Option<f32>
 ) {
-    // if all vertices are static, return to avoid inverting I
-    if vertices.iter().all(|x| x.w <= 0.0) { return; }
-    let k_damping = k_damping.unwrap_or(0.3);
-    let (x_cm, v_cm) = physics::center_of_mass(&vertices);
-    let L = vertices
-        .iter()
-        // NOTE: infinite mass => velocity 0 anyways
-        .filter(|x| x.w > 0.0)
-        .fold(Vec3::new(0.0, 0.0, 0.0), |acc, x| acc + nalgebra_glm::cross(&(x.position - x_cm),  &x.velocity) * (1.0 / x.w));
-    let I = vertices
-        .iter()
-        .filter(|x| x.w > 0.0)
-        .fold(Mat3::zeros(), |acc, x| acc + (1.0 / x.w) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)).transpose());
-    let omega = I.try_inverse().unwrap() * L;
-    for v in vertices.iter_mut() {
-        if v.w <= 0.0 { continue; }
-        let dv = v_cm - nalgebra_glm::cross(&(v.position - x_cm), &omega) - v.velocity;
-        v.velocity = v.velocity + k_damping * dv;
+    for m in mobjects.iter() {
+        let (start, total) = m.get_physics_index_range();
+        let vertices = &mut scene_vertices[start..start + total];
+        // if all vertices are static, return to avoid inverting I
+        if vertices.iter().all(|x| x.w <= 0.0) { return; }
+        let k_damping = k_damping.unwrap_or(0.3);
+        let (x_cm, v_cm) = physics::center_of_mass(&vertices);
+        let L = vertices
+            .iter()
+            // NOTE: infinite mass => velocity 0 anyways
+            .filter(|x| x.w > 0.0)
+            .fold(Vec3::new(0.0, 0.0, 0.0), |acc, x| acc + nalgebra_glm::cross(&(x.position - x_cm),  &x.velocity) * (1.0 / x.w));
+        let I = vertices
+            .iter()
+            .filter(|x| x.w > 0.0)
+            .fold(Mat3::zeros(), |acc, x| acc + (1.0 / x.w) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)).transpose());
+        let omega = I.try_inverse().unwrap() * L;
+        for v in vertices.iter_mut() {
+            if v.w <= 0.0 { continue; }
+            let dv = v_cm - nalgebra_glm::cross(&(v.position - x_cm), &omega) - v.velocity;
+            v.velocity = v.velocity + k_damping * dv;
+        }
     }
 }
 
@@ -202,6 +213,7 @@ impl PBDSolver {
             .for_each(|v| {
                 v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
             });
+        dampen_velocities(physics_vertices, mobjects, None);
         let mut ps: Vec<Vec3> = physics_vertices.iter().map(|v| v.position + dt * v.velocity).collect();
         // let old_pos: Vec<Vec3> = physics_vertices.iter().map(|v| v.position).collect();
 
@@ -216,46 +228,12 @@ impl PBDSolver {
         let inv_masses: Vec<f32> = physics_vertices.iter().map(|v| v.w).collect();
         let bs: Vec<Vec3> = physics_vertices.iter().map(|v| v.body_space_position).collect();
         // TODO: project_constraints computes x_cm using all vertices, which is wrong; let's fix this
-        project_constraints(&mut ps, &bs, &inv_masses, &constraints);
+        for _ in 0..5 {
+            project_constraints(&mut ps, &bs, &inv_masses, &constraints);
+        }
         for (v, p) in physics_vertices.iter_mut().zip(ps.iter()) {
             v.velocity = (p - v.position) / dt;
             v.position = *p;
         }
-
-        // for k in 0..mobjects.len() {
-        //     // HACK: this isn't looking nice whatsoever, just a workaround for now...
-        //     let (left, right) = mobjects.split_at_mut(k);
-        //     let (mobj, rest) = right.split_first_mut().unwrap();
-        //     let id = mobj.id;
-        //     let (vertices, constraints) = mobj.get_mut_vertices_and_constraints();
-        //     let mobj_map: HashMap<u32, &Mobject> = left.iter()
-        //         .chain(rest.iter())
-        //         .map(|m| (m.id, m))
-        //         .collect();
-
-        //     vertices.iter_mut().for_each(|v| {
-        //         v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
-        //     });
-        //     // dampen_velocities(vertices, None);
-
-        //     let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
-        //     let old_pos: Vec<Vec3> = vertices.iter().map(|v| v.position).collect();
-        //     let collisions = generate_collision_constraints(id, &old_pos, &ps, &vertices.iter().map(|v| v.w).collect::<Vec<f32>>(),  spatial_hash, &mobj_map);
-        //     let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
-        //     constraints.extend(collisions.into_iter());
-
-        //     let inv_masses: Vec<f32> = vertices.iter().map(|v| v.w).collect();
-        //     let bs: Vec<Vec3> = vertices.iter().map(|v| v.body_space_position).collect();
-
-        //     project_constraints(&mut ps, &bs, &inv_masses, &constraints);
-
-        //     for (v, p) in vertices.iter_mut().zip(ps.iter()) {
-        //         v.velocity = (p - v.position) / dt;
-        //         v.position = *p;
-        //     }
-        //     let (com, _) = physics::center_of_mass(&vertices);
-        //     mobj.set_com(com);
-        // }
-        // rebuild_spatial_hash(spatial_hash, mobjects);
     }
 }

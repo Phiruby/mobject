@@ -96,7 +96,7 @@ impl ShapeIntent {
         self
     }
     pub fn make_rigid(mut self) -> Self {
-        self.constraints.push(PhysicsConstraint::RigidBody(ShapeConstraint { }));
+        self.constraints.push(PhysicsConstraint::RigidBody(ShapeConstraint { start_physics_vertices_idx: 0, total_physics_vertices: self.entity.get_vertices().len() }));
         self
     }
     pub fn with_constraints(mut self, constraints: Vec<PhysicsConstraint>) -> Self {

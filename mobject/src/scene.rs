@@ -47,7 +47,7 @@ impl DerefMut for Anim {
 }
 
 enum Action {
-    AddMobject(MobjectId, Box<dyn BuiltShape>),
+    AddMobject(MobjectId, ShapeIntent),
     Wait { seconds: u8 },
     Play(Box<dyn Animation>),
     CameraMove(CameraMotion)
@@ -395,7 +395,7 @@ impl Scene {
     ) {
         let vertices = mobject.get_vertices();
         let mut physics_vertices: Vec<crate::shapes::PhysicsVertex> = vertices.iter().map(|v| crate::shapes::PhysicsVertex::new(v.position, mobj_id)).collect();
-        let (cm, _) = crate::physics::center_of_mass(&self.physics_vertices);
+        let (cm, _) = crate::physics::center_of_mass(&physics_vertices);
         let total = vertices.len();
         let start_index = self.physics_vertices.len();
         // NOTE: need to separately zip separately since passed lengths may differ
@@ -425,9 +425,9 @@ impl Scene {
                 self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
             }
         }
-        let mut build_mobj = mobject.entity.build(&self.device, self.physical_device_properties);
-        self.add_physics_vertices(&mut build_mobj, mobject.inverse_masses, mobject.velocities, mobject.constraints, id);
-        self.actions.push_back(Action::AddMobject(id, build_mobj));
+        // let mut build_mobj = mobject.entity.build(&self.device, self.physical_device_properties);
+        // self.add_physics_vertices(&mut build_mobj, mobject.inverse_masses, mobject.velocities, mobject.constraints, id);
+        self.actions.push_back(Action::AddMobject(id, mobject));
         id
     }
     pub fn wait(&mut self, seconds: u8) {
@@ -462,7 +462,9 @@ impl Scene {
         if self.actions.is_empty() { return; }
         let action = self.actions.pop_front().unwrap();
         match action {
-            Action::AddMobject(id, build_mobject) => {
+            Action::AddMobject(id, mobject) => {
+                let mut build_mobject = mobject.entity.build(&self.device, self.physical_device_properties);
+                self.add_physics_vertices(&mut build_mobject, mobject.inverse_masses, mobject.velocities, mobject.constraints, id);
                 let mobj_desc_sets = self.make_mobject_descriptor_set(&build_mobject);
                 self.mobjects.push(Mobject { id, mobject: build_mobject, descriptor_sets: mobj_desc_sets });
             },
@@ -509,7 +511,6 @@ impl Scene {
                 self.take_action();
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
-
             self.solver.update(&self.mobjects, &mut self.physics_vertices, &self.constraints, &mut self.spatial_hash, 0.002);
             self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(&self.physics_vertices); });
             pbd::rebuild_spatial_hash(&mut self.spatial_hash, &mut self.mobjects);
