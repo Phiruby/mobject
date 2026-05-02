@@ -6,6 +6,7 @@ use nalgebra_glm as glm;
 use nalgebra_glm::Vec3;
 use std::{os::raw::c_void};
 
+use crate::shapes::ShapeIntent;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
@@ -104,8 +105,8 @@ fn create_stretch_constraints(
 
 
 
-impl Default for Cloth {
-    fn default() -> Self {
+impl Cloth {
+    pub fn example() -> ShapeIntent {
         let width = 10;
         let height = 10;
         let spacing = 0.1;
@@ -133,12 +134,13 @@ impl Default for Cloth {
             width,
             height,
             &positions,
-            0.2,
+            0.01,
         ));
 
         Self::new()
         .with_vertices(vertices)
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)
+        .finish_construction()
         .with_constraints(constraints)
     }
 }

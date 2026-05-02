@@ -10,8 +10,6 @@ macro_rules! define_shape {
         $vis struct $name {
             pub vertices: Vec<RenderVertex>,
             pub indices:  $ity,
-            // pub physics_vertices: Vec<crate::shapes::PhysicsVertex>,
-            pub constraints: Vec<crate::physics::constraints::PhysicsConstraint>,
             physics_start_index: usize,
             physics_total_vertices: usize,
             com: Vec3,
@@ -33,7 +31,6 @@ macro_rules! define_shape {
                     uniform_buffers: None,
                     uniform_buffer_memories: None,
                     uniform_mapped_memories: None,
-                    constraints: Vec::new(),
                     ubo: UBO { model: glm::identity() },
                     texture_path: None,
                     pipeline: $pipeline,
@@ -73,13 +70,6 @@ macro_rules! define_shape {
                 }
             }
 
-            pub fn with_constraints(self, constraints: Vec<crate::physics::constraints::PhysicsConstraint>) -> Self {
-                // TODO: static / attachment constraints should get infinite mass
-                Self {
-                    constraints,
-                    ..self
-                }
-            }
 
             pub fn include_texture(self, texture_path: &str) -> Self {
                 Self {

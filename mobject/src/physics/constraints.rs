@@ -30,8 +30,6 @@ pub trait Constraint {
 /// the `attach_to` vertex to
 #[derive(Clone, Debug)]
 pub struct AttachmentConstraint {
-    pub left_mobject_id: u32,
-    pub right_mobject_id: u32,
     pub left_vertex_index: usize,
     pub right_vertex_index: usize,
 }
@@ -82,23 +80,25 @@ pub enum PhysicsConstraint {
 }
 
 
-// impl Constraint for AttachmentConstraint {
-//     fn evaluate(&self, mobjects: HashMap<u32, &Mobject>) -> f32 {
-//         let ml = mobjects[&self.left_mobject_id];
-//         let mr = mobjects[&self.right_mobject_id];
-//         let vl = ml.get_physics_vertices()[self.left_vertex_index];
-//         let vr = mr.get_physics_vertices()[self.right_vertex_index];
-//         (vl.position - vr.position).norm()
-//     }
-//     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
-//         vec![
-//             ConstrainedGradient {
-//                 index: self.inp_vertex_index as usize,
-//                 gradient: (positions[self.inp_vertex_index] - self.attached_to.position) * 2.0
-//             }
-//         ]
-//     }
-// }
+impl Constraint for AttachmentConstraint {
+    fn evaluate(&self, positions: &[Vec3]) -> f32 {
+        let ml = positions[self.left_vertex_index];
+        let mr = positions[self.right_vertex_index];
+        (ml - mr).norm()
+    }
+    fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
+    let diff = positions[self.left_vertex_index] - positions[self.right_vertex_index];
+    let dist = diff.norm();
+    if dist < 1e-8 {
+        return vec![];
+    }
+    let dir = diff / dist;
+    vec![
+        ConstrainedGradient { index: self.left_vertex_index,  gradient: dir  },
+        ConstrainedGradient { index: self.right_vertex_index, gradient: -dir },
+    ]
+}
+}
 
 impl Constraint for StaticConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
@@ -116,7 +116,7 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index] - self.q).dot(&self.n) - 0.001
+        (positions[self.inp_vertex_index] - self.q).dot(&self.n)
     }
     fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
         vec![
@@ -154,7 +154,7 @@ impl Constraint for PhysicsConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
         match self {
             PhysicsConstraint::Static(c) => c.evaluate(positions),
-            PhysicsConstraint::Attachment(c) => panic!("Not implemented"),
+            PhysicsConstraint::Attachment(c) => c.evaluate(positions),
             PhysicsConstraint::Stretch(c) => c.evaluate(positions),
             PhysicsConstraint::Collision(c) => c.evaluate(positions),
             PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have an evaluate function")
@@ -163,7 +163,7 @@ impl Constraint for PhysicsConstraint {
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
         match self {
             PhysicsConstraint::Static(c) => c.gradient(positions),
-            PhysicsConstraint::Attachment(c) => panic!("Not implemented"),
+            PhysicsConstraint::Attachment(c) => c.gradient(positions),
             PhysicsConstraint::Stretch(c) => c.gradient(positions),
             PhysicsConstraint::Collision(c) => c.gradient(positions),
             PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have a gradient function")
@@ -189,6 +189,13 @@ impl PhysicsConstraint {
             PhysicsConstraint::Collision(i) => i.inp_vertex_index += offset,
             PhysicsConstraint::RigidBody(i) => { i.start_physics_vertices_idx += offset;},
             PhysicsConstraint::Attachment(_) => panic!("Attachment constraints depend on multiple mobjects. Cannot add offset"),
+        }
+    }
+
+    pub fn k(&self) -> f32 {
+        match self {
+            PhysicsConstraint::Stretch(s) => s.k,
+            _ => 1.0
         }
     }
 }

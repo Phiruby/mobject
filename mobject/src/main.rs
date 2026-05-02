@@ -23,13 +23,15 @@ fn main() {
         // .make_static()
         // .anchor(vec![0, 1])
         .make_rigid();
-    let c = Box::new(Cloth::default().finish_construction().anchor(vec![0, 9]));
+    let c = Cloth::example().anchor(vec![0, 9]);
     let mut scene = Scene::new();
-    scene.add_baseplate();
-    // scene.wait(3);
-    // scene.add(c);
+    // scene.add_baseplate();
     scene.wait(3);
-    scene.add(rect);
+    let c = scene.add(c);
+    // scene.wait(3);
+    let r = scene.add(rect);
+    scene.attach(c, 90, r, 0);
+    scene.attach(c, 99, r, 1);
     scene.wait(8);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
 

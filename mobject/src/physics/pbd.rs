@@ -88,10 +88,11 @@ fn project_constraints(
             continue;
         }
         let grads = c.gradient(world_positions);
-        let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm());
+        let k = c.k();
+        let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm_squared());
         let s = ev / denom;
         for g in grads.iter() {
-            world_positions[g.index] -= g.gradient * s * inv_masses[g.index];
+            world_positions[g.index] -= k * g.gradient * s * inv_masses[g.index];
         }
     }
 }
@@ -218,6 +219,7 @@ impl PBDSolver {
         // let old_pos: Vec<Vec3> = physics_vertices.iter().map(|v| v.position).collect();
 
         let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
+        // NOTE: collision constraints affect attachment constraints, so need to fix
         let collision_constraints = generate_collision_constraints(
             mobjects,
             physics_vertices,
@@ -228,7 +230,7 @@ impl PBDSolver {
         let inv_masses: Vec<f32> = physics_vertices.iter().map(|v| v.w).collect();
         let bs: Vec<Vec3> = physics_vertices.iter().map(|v| v.body_space_position).collect();
         // TODO: project_constraints computes x_cm using all vertices, which is wrong; let's fix this
-        for _ in 0..5 {
+        for _ in 0..15 {
             project_constraints(&mut ps, &bs, &inv_masses, &constraints);
         }
         for (v, p) in physics_vertices.iter_mut().zip(ps.iter()) {
