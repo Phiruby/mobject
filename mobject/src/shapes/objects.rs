@@ -11,13 +11,15 @@ use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, Bu
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
 use crate::physics::constraints::*;
+use crate::shapes::Manifold;
 
 define_shape!(
     pub struct Cloth {
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Primitive,
+    Manifold::TwoD
 );
 
 fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
@@ -33,7 +35,7 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
                 x as f32 * spacing - m,
                 // 0.0,
                 y as f32 * spacing - my,
-                0.35
+                0.85
             ));
             tex_coords.push(Vec2::new(x as f32 / width as f32, y as f32 / height as f32));
         }

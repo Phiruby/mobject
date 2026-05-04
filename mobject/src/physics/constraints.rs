@@ -57,7 +57,8 @@ pub struct ShapeConstraint {
 pub struct CollisionConstraint {
     pub inp_vertex_index: usize,
     pub q: Vec3,
-    pub n: Vec3
+    pub n: Vec3,
+    pub thickness: f32
 }
 
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
@@ -116,7 +117,7 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index] - self.q).dot(&self.n)
+        (positions[self.inp_vertex_index] - self.q).dot(&self.n) - self.thickness
     }
     fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
         vec![
@@ -195,6 +196,7 @@ impl PhysicsConstraint {
     pub fn k(&self) -> f32 {
         match self {
             PhysicsConstraint::Stretch(s) => s.k,
+            // PhysicsConstraint::Collision(_) => 3.0,
             _ => 1.0
         }
     }

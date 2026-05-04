@@ -5,7 +5,8 @@ macro_rules! define_shape {
             vertices: Vec<RenderVertex> $(,)?,
             indices:  $ity:ty $(,)?
         },
-        $pipeline:expr
+        $pipeline:expr,
+        $manifold:expr
     ) => {
         $vis struct $name {
             pub vertices: Vec<RenderVertex>,
@@ -18,7 +19,8 @@ macro_rules! define_shape {
             uniform_buffer_memories: Option<[DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize]>,
             uniform_mapped_memories: Option<[*mut c_void; MAX_FRAMES_IN_FLIGHT as usize]>,
             ubo: UBO,
-            pipeline: Pipelines
+            pipeline: Pipelines,
+            manifold: crate::shapes::Manifold,
         }
 
         impl $name {
@@ -34,6 +36,7 @@ macro_rules! define_shape {
                     ubo: UBO { model: glm::identity() },
                     texture_path: None,
                     pipeline: $pipeline,
+                    manifold: $manifold,
                     com: glm::vec3(0.0, 0.0, 0.0),
                 }
             }
@@ -184,6 +187,7 @@ macro_rules! define_shape {
                 self.physics_total_vertices = total;
             }
             fn get_physics_index_range(&self) -> (usize, usize) { (self.physics_start_index, self.physics_total_vertices) }
+            fn manifold(&self) -> crate::shapes::Manifold { self.manifold }
         }
         impl crate::shapes::ShapeMotion for $name {
             fn rotate(&mut self, axis: &glm::Vec3, angle: f32) {

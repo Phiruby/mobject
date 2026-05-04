@@ -5,7 +5,7 @@ use nalgebra_glm::{Vec3, Mat3};
 use shapeject::SpatialHash3D;
 use spatial_hash_3d::SpatialHashGrid;
 use crate::physics::constraints::{self, CollisionConstraint, Constraint, Equality, PhysicsConstraint};
-use crate::shapes::PhysicsVertex;
+use crate::shapes::{Manifold, PhysicsVertex};
 use crate::{scene::Mobject};
 use crate::physics;
 use nalgebra::{Complex, Matrix3, Matrix3x2, SVD};
@@ -110,6 +110,7 @@ fn generate_collision_constraints(
     new_mobj_positions: &[Vec3],
     spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
 ) -> Vec<PhysicsConstraint> {
+    let mut bee = false;
     let mut collisions: Vec<PhysicsConstraint> = Vec::new();
     for (j, (v, old_v)) in new_mobj_positions
         .iter()
@@ -134,10 +135,6 @@ fn generate_collision_constraints(
                     let e2 = v3.position - v1.position;
                     let mut n = nalgebra_glm::cross(&e1, &e2);
                     // TODO: maybe don't need this check?
-                    let mag_sq = n.norm_squared();
-                    if mag_sq < 1e-8 {
-                        return;
-                    }
                     n = n.normalize();
 
                     let v_to_p = v - v1.position;
@@ -145,19 +142,25 @@ fn generate_collision_constraints(
                     let q_c = v - (dist * n);
                     let old_ray: Vec3 = old_v.position - q_c;
                     let new_ray = v - q_c;
-                    if old_ray.dot(&n) < 0.0 {
+                    if matches!(m.manifold(), Manifold::TwoD) && old_ray.dot(&n) < 0.0 {
                         n = -n;
                     }
                     // if old and new in same direction relative to point of contact, skip and continue
                     if old_ray.dot(&n) * new_ray.dot(&n) > 0.0 {
                         return;
                     }
-                    // if new_ray.dot(&n) < 0.01 {
+                    // 2D objects (e.g rectangle) will need some thickness so it doesn't stick on the surface of the collidee
+                    // so we add thickness to the collision constraint
+                    let mut thickness = 0.0;
+                    if matches!(mobjects[old_v.mobject_id as usize].manifold(), Manifold::TwoD) {
+                        thickness = 0.0001;
+                    }
                     collisions.push(
                         PhysicsConstraint::Collision(CollisionConstraint {
                             inp_vertex_index: j,
                             q: q_c,
-                            n: n
+                            n: n,
+                            thickness
                         }
                     ));
                     // }

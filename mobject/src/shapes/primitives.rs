@@ -11,12 +11,14 @@ use crate::shapes::ShapeIntent;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
+use crate::shapes::Manifold;
 define_shape!(
     pub struct Triangle {
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Primitive,
+    Manifold::TwoD
 );
 
 define_shape!(
@@ -24,15 +26,27 @@ define_shape!(
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Primitive,
+    Manifold::ThreeD
 );
 
 define_shape!(
-    pub struct Cloth {
+    pub struct ObjModel {
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Primitive,
+    Manifold::ThreeD
+);
+
+
+define_shape!(
+    pub struct Rectangle {
+        vertices: Vec<RenderVertex>,
+        indices: Vec<u32>,
+    },
+    Pipelines::Primitive,
+    Manifold::TwoD
 );
 
 impl Default for Triangle {
@@ -61,13 +75,6 @@ impl Default for Triangle {
     }
 }
 
-define_shape!(
-    pub struct ObjModel {
-        vertices: Vec<RenderVertex>,
-        indices: Vec<u32>,
-    },
-    Pipelines::Primitive
-);
 
 impl ObjModel {
     pub fn load(obj_file: &str) -> Self {
@@ -101,13 +108,6 @@ impl ObjModel {
     }
 }
 
-define_shape!(
-    pub struct Rectangle {
-        vertices: Vec<RenderVertex>,
-        indices: Vec<u32>,
-    },
-    Pipelines::Primitive
-);
 
 impl Rectangle {
     pub fn load(vertices: [RenderVertex; 4]) -> Self {
@@ -259,7 +259,6 @@ impl Cube {
                 )
             })
             .collect();
-
         let u32_indices = indices.iter().map(|&x| x as u32).collect();
 
         Self::new()
@@ -306,18 +305,13 @@ pub fn create_baseplate() -> ShapeIntent {
     ];
 
     let indices: Vec<u32> = vec![
-        // Top
         0, 1, 2, 2, 3, 0,
-        // Bottom
         5, 4, 7, 7, 6, 5,
-        // Left
         4, 0, 3, 3, 7, 4,
-        // Right
         1, 5, 6, 6, 2, 1,
-        // Front
         4, 5, 1, 1, 0, 4,
-        // Back
-        3, 2, 6, 6, 7, 3,
+        // top
+        3, 6, 2, 6, 3, 7,
     ];
 
     let normals = shapes::compute_normals(&indices.iter().map(|&i| i as usize).collect::<Vec<_>>(), &positions);

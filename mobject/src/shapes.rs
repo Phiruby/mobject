@@ -44,6 +44,11 @@ pub trait Vertex<const N: usize> {
     fn binding_description() -> VertexInputBindingDescription;
 }
 
+#[derive(Clone, Copy)]
+pub enum Manifold {
+    TwoD,
+    ThreeD,
+}
 // TODO: all fields in this struct will be sent to GPU!
 // will need to drop / convert to `GraphicsVertex`
 #[repr(C)]
@@ -254,6 +259,7 @@ pub trait ShapeConstruction {
     fn update_spatial_hash(&self, space: &mut shapeject::SpatialHash3D<Vec<(u32, usize)>>, mid: u32);
     fn set_physics_index_range(&mut self, start: usize, total: usize);
     fn get_physics_index_range(&self) -> (usize, usize);
+    fn manifold(&self) -> Manifold;
 }
 
 pub trait BuiltShape: ShapeMotion + ShapeConstruction {}
