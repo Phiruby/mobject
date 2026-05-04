@@ -194,6 +194,96 @@ impl Default for Cube {
     }
 }
 
+impl Cube {
+    pub fn example(subdivisions: usize) -> Self {
+        let half = 0.25; // smaller cube (total size = 0.5)
+        let center = Vec3::new(0.0, 0.0, 1.6);
+
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+
+        let mut add_face = |origin: Vec3, u_dir: Vec3, v_dir: Vec3| {
+            let base_index = positions.len();
+
+            for i in 0..=subdivisions {
+                for j in 0..=subdivisions {
+                    let u = i as f32 / subdivisions as f32;
+                    let v = j as f32 / subdivisions as f32;
+
+                    positions.push(origin + u_dir * u + v_dir * v);
+                }
+            }
+
+            for i in 0..subdivisions {
+                for j in 0..subdivisions {
+                    let i0 = base_index + i * (subdivisions + 1) + j;
+                    let i1 = i0 + 1;
+                    let i2 = i0 + (subdivisions + 1);
+                    let i3 = i2 + 1;
+
+                    indices.extend_from_slice(&[
+                        i0, i1, i3,
+                        i3, i2, i0,
+                    ]);
+                }
+            }
+        };
+
+        // Cube min/max (same extent in all axes)
+        let min = center - Vec3::new(half, half, half);
+        let max = center + Vec3::new(half, half, half);
+
+        let dx = Vec3::new(max.x - min.x, 0.0, 0.0);
+        let dy = Vec3::new(0.0, max.y - min.y, 0.0);
+        let dz = Vec3::new(0.0, 0.0, max.z - min.z);
+
+        // 6 faces
+        add_face(Vec3::new(min.x, min.y, min.z), dx, dy); // bottom
+        add_face(Vec3::new(min.x, min.y, max.z), dx, dy); // top
+        add_face(Vec3::new(min.x, min.y, min.z), dx, dz); // front
+        add_face(Vec3::new(min.x, max.y, min.z), dx, dz); // back
+        add_face(Vec3::new(min.x, min.y, min.z), dy, dz); // left
+        add_face(Vec3::new(max.x, min.y, min.z), dy, dz); // right
+
+        let normals = shapes::compute_normals(&indices, &positions);
+
+        let vertices: Vec<RenderVertex> = positions
+            .into_iter()
+            .zip(normals.into_iter())
+            .map(|(pos, norm)| {
+                RenderVertex::new(
+                    pos,
+                    Vec3::new(1.0, 0.0, 0.0),
+                    norm,
+                    None,
+                )
+            })
+            .collect();
+
+        let u32_indices = indices.iter().map(|&x| x as u32).collect();
+
+        Self::new()
+            .with_vertices(vertices)
+            .with_indices(u32_indices)
+    }
+
+    pub fn edge_indices_top_front(subdivisions: usize) -> Vec<usize> {
+        let verts_per_face = (subdivisions + 1) * (subdivisions + 1);
+
+        let top_face_offset = verts_per_face; // second face added
+
+        let mut indices = Vec::new();
+
+        for i in 0..=subdivisions {
+            // front row of top face (j = 0)
+            let idx = top_face_offset + i * (subdivisions + 1);
+            indices.push(idx);
+        }
+
+        indices
+    }
+
+}
 pub fn create_baseplate() -> ShapeIntent {
     let width = 5.0;
     let depth = 0.1;

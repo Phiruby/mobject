@@ -150,8 +150,14 @@ macro_rules! define_shape {
                 self.texture_path.as_deref()
             }
             fn sync_phys_and_render_vertices(&mut self, physics_vertices: &[crate::shapes::PhysicsVertex]) {
+                let np = (0..self.physics_total_vertices).map(|i| physics_vertices[i + self.physics_start_index].position).collect::<Vec<Vec3>>();
+                let normals = crate::shapes::compute_normals(
+                    &self.indices.iter().map(|i| *i as usize).collect::<Vec<usize>>(),
+                    &np,
+                );
                 for i in 0..self.physics_total_vertices {
                     self.vertices[i as usize].position = physics_vertices[i + self.physics_start_index as usize].position;
+                    self.vertices[i as usize].normal = normals[i as usize];
                 }
             }
             fn set_com(&mut self, com: Vec3) {

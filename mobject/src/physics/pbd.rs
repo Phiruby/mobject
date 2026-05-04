@@ -216,8 +216,6 @@ impl PBDSolver {
             });
         dampen_velocities(physics_vertices, mobjects, None);
         let mut ps: Vec<Vec3> = physics_vertices.iter().map(|v| v.position + dt * v.velocity).collect();
-        // let old_pos: Vec<Vec3> = physics_vertices.iter().map(|v| v.position).collect();
-
         let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
         // NOTE: collision constraints affect attachment constraints, so need to fix
         let collision_constraints = generate_collision_constraints(

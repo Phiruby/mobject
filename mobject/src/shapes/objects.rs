@@ -2,7 +2,7 @@ use ash::Device;
 use ash::vk::{
     Buffer, DeviceMemory, PhysicalDeviceMemoryProperties
 };
-use nalgebra_glm as glm;
+use nalgebra_glm::{self as glm, Vec2};
 use nalgebra_glm::Vec3;
 use std::{os::raw::c_void};
 
@@ -20,8 +20,9 @@ define_shape!(
     Pipelines::Primitive
 );
 
-fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>) {
+fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     let mut positions = vec![];
+    let mut tex_coords: Vec<Vec2> = vec![];
     let mut indices = vec![];
     let m = spacing * (width / 2) as f32;
     let my = spacing * (height / 2) as f32;
@@ -34,6 +35,7 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
                 y as f32 * spacing - my,
                 0.35
             ));
+            tex_coords.push(Vec2::new(x as f32 / width as f32, y as f32 / height as f32));
         }
     }
 
@@ -55,7 +57,7 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
         }
     }
 
-    (positions, indices)
+    (positions, indices, tex_coords)
 }
 
 fn create_stretch_constraints(
@@ -111,19 +113,20 @@ impl Cloth {
         let height = 10;
         let spacing = 0.1;
 
-        let (positions, indices) = generate_grid(width, height, spacing);
+        let (positions, indices, tex_coords) = generate_grid(width, height, spacing);
 
         let normals = shapes::compute_normals(&indices, &positions);
 
         let vertices: Vec<RenderVertex> = positions
             .iter()
             .zip(normals.iter())
-            .map(|(pos, norm)| {
+            .zip(tex_coords.iter())
+            .map(|((pos, norm), tex)| {
                 RenderVertex::new(
                     *pos,
-                    Vec3::new(0.0, 0.0, 1.0),
+                    Vec3::new(1.0, 1.0, 1.0),
                     *norm,
-                    None,
+                    Some(*tex),
                 )
             })
             .collect();
@@ -140,6 +143,7 @@ impl Cloth {
         Self::new()
         .with_vertices(vertices)
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)
+        .with_texture(String::from("textures/cloth.jpg"))
         .finish_construction()
         .with_constraints(constraints)
     }
