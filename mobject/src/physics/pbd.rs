@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cgmath::Vector3;
 use nalgebra_glm::{Vec3, Mat3};
@@ -104,6 +104,11 @@ pub fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>,
     }
 }
 
+fn barycentric_test(p: &Vec3, a: &Vec3, b: &Vec3, c: &Vec3) -> bool {
+    let (u, v, w) = physics::get_barycentric_coords(p, a, b, c);
+    u >= 0.0 && v >= 0.0 && w >= 0.0
+}
+
 fn generate_collision_constraints(
     mobjects: &[Mobject],
     physics_vertices: &[PhysicsVertex],
@@ -145,6 +150,9 @@ fn generate_collision_constraints(
                     if matches!(m.manifold(), Manifold::TwoD) && old_ray.dot(&n) < 0.0 {
                         n = -n;
                     }
+                    if !barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
+                        return;
+                    }
                     // if old and new in same direction relative to point of contact, skip and continue
                     if old_ray.dot(&n) * new_ray.dot(&n) > 0.0 {
                         return;
@@ -163,7 +171,6 @@ fn generate_collision_constraints(
                             thickness
                         }
                     ));
-                    // }
                 })
             });
     }

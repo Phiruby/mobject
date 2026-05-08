@@ -147,10 +147,10 @@ impl Default for Rectangle {
 impl Default for Cube {
     fn default() -> Self {
         let positions = vec![
-            Vec3::new(-0.25, -0.25,  1.75),
-            Vec3::new( 0.25, -0.25,  1.75),
-            Vec3::new( 0.25,  0.25,  1.75),
-            Vec3::new(-0.25,  0.25,  1.75),
+            Vec3::new(-0.25, -0.25,  2.0),
+            Vec3::new( 0.25, -0.25,  2.0),
+            Vec3::new( 0.25,  0.25,  2.0),
+            Vec3::new(-0.25,  0.25,  2.0),
 
             Vec3::new(-0.25, -0.25, 1.5),
             Vec3::new( 0.25, -0.25, 1.5),
@@ -222,8 +222,8 @@ impl Cube {
                     let i3 = i2 + 1;
 
                     indices.extend_from_slice(&[
-                        i0, i1, i3,
-                        i3, i2, i0,
+                        i0, i3, i1,
+                        i3, i0, i2,
                     ]);
                 }
             }
@@ -281,7 +281,6 @@ impl Cube {
 
         indices
     }
-
 }
 pub fn create_baseplate() -> ShapeIntent {
     let width = 5.0;

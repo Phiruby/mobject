@@ -47,3 +47,22 @@ pub fn raw_center_of_mass(vertices: &[Vec3], inv_masses: &[f32]) -> Vec3 {
     com /= total_mass;
     com
 }
+
+pub fn get_barycentric_coords(p: &Vec3, a: &Vec3, b: &Vec3, c: &Vec3) -> (f32, f32, f32) {
+    let v0 = b - a;
+    let v1 = c - a;
+    let v2 = p - a;
+    let d00 = nalgebra_glm::dot(&v0, &v0);
+    let d01 = nalgebra_glm::dot(&v0, &v1);
+    let d11 = nalgebra_glm::dot(&v1, &v1);
+    let d20 = nalgebra_glm::dot(&v2, &v0);
+    let d21 = nalgebra_glm::dot(&v2, &v1);
+    let denom = d00 * d11 - d01 * d01;
+    if denom.abs() < f32::EPSILON {
+        return (-1.0, -1.0, -1.0);
+    }
+    let v = (d11 * d20 - d01 * d21) / denom;
+    let w = (d00 * d21 - d01 * d20) / denom;
+    let u = 1.0 - v - w;
+    (u, v, w)
+}
