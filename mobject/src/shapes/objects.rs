@@ -26,15 +26,14 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
     let mut positions = vec![];
     let mut tex_coords: Vec<Vec2> = vec![];
     let mut indices = vec![];
-    let m = spacing * (width / 2) as f32;
-    let my = spacing * (height / 2) as f32;
+    let half_w = (width.saturating_sub(1)) as f32 * spacing * 0.5;
+    let half_h = (height.saturating_sub(1)) as f32 * spacing * 0.5;
     // positions
     for y in 0..height {
         for x in 0..width {
             positions.push(Vec3::new(
-                x as f32 * spacing - m,
-                // 0.0,
-                y as f32 * spacing - my,
+                x as f32 * spacing - half_w,
+                y as f32 * spacing - half_h,
                 0.85
             ));
             tex_coords.push(Vec2::new(x as f32 / width as f32, y as f32 / height as f32));
@@ -139,7 +138,7 @@ impl Cloth {
             width,
             height,
             &positions,
-            0.01,
+            1.0,
         ));
 
         Self::new()
@@ -147,6 +146,7 @@ impl Cloth {
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)
         .with_texture(String::from("textures/cloth.jpg"))
         .finish_construction()
+        // .anchor(vec![0, width - 1])
         .with_constraints(constraints)
     }
 }

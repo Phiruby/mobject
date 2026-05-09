@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use cgmath::Vector3;
 use nalgebra_glm::{Vec3, Mat3};
 use shapeject::SpatialHash3D;
@@ -9,6 +7,10 @@ use crate::shapes::{Manifold, PhysicsVertex};
 use crate::{scene::Mobject};
 use crate::physics;
 use nalgebra::{Complex, Matrix3, Matrix3x2, SVD};
+
+// add a small offset to 2d manifolds (avoid "glitching" in and out of the collidee, for instance)
+pub const SURFACE_OFFSET: f32 = 0.012;
+
 pub struct PBDSolver ();
 
 /// Implementation of https://matthias-research.github.io/pages/publications/MeshlessDeformations_SIG05.pdf
@@ -90,9 +92,14 @@ fn project_constraints(
         }
         // NOTE: check if latest position is even
         let grads = c.gradient(world_positions);
+        if grads.is_empty() {
+            continue;
+        }
         let k = c.k();
         let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm_squared());
-        if denom.is_nan() { continue; }
+        if denom.is_nan() || denom <= f32::EPSILON {
+            continue;
+        }
         let s = ev / denom;
         for g in grads.iter() {
             world_positions[g.index] -= k * g.gradient * s * inv_masses[g.index];
@@ -153,8 +160,12 @@ fn generate_collision_constraints(
                     let (v1, v2, v3) = (&adj_vertices[indices[*i * 3] as usize], &adj_vertices[indices[*i*3 + 1] as usize], &adj_vertices[indices[*i*3 + 2] as usize]);
                     let e1 = v2.position - v1.position;
                     let e2 = v3.position - v1.position;
-                    let mut n = nalgebra_glm::cross(&e1, &e2);
-                    n = n.normalize();
+                    let cross = nalgebra_glm::cross(&e1, &e2);
+                    let clen = nalgebra_glm::length(&cross);
+                    if clen < 1e-12 {
+                        return;
+                    }
+                    let mut n = cross / clen;
 
                     let v_to_p = v - v1.position;
                     let dist = nalgebra_glm::dot(&v_to_p, &n);
@@ -164,9 +175,9 @@ fn generate_collision_constraints(
                     if matches!(m.manifold(), Manifold::TwoD) && old_ray.dot(&n) < 0.0 {
                         n = -n;
                     }
-                    // if !physics::barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
-                    //     return;
-                    // }
+                    if !physics::barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
+                        return;
+                    }
 
                     if new_ray.dot(&n) > 0.0 {
                         return;
@@ -175,7 +186,7 @@ fn generate_collision_constraints(
                     // so we add thickness to the collision constraint
                     let mut thickness = 0.0;
                     if matches!(mobjects[old_v.mobject_id as usize].manifold(), Manifold::TwoD) {
-                        thickness = 0.001;
+                        thickness = SURFACE_OFFSET;
                     }
                     collisions.push(
                         PhysicsConstraint::Collision(CollisionConstraint {
@@ -202,8 +213,23 @@ fn dampen_velocities(
         let (start, total) = m.get_physics_index_range();
         let vertices = &mut scene_vertices[start..start + total];
         // if all vertices are static, return to avoid inverting I
-        if vertices.iter().all(|x| x.w <= 0.0) { return; }
-        let k_damping = k_damping.unwrap_or(0.3);
+        if vertices.iter().all(|x| x.w <= 0.0) {
+            continue;
+        }
+        let k_damping = k_damping.unwrap_or(0.5);
+        // skipping angular damping for 2d manifolds
+        // since it caused flinging behavior (not sure why!)
+        if matches!(m.manifold(), Manifold::TwoD) {
+            let (_x_cm, v_cm) = physics::center_of_mass(vertices);
+            for v in vertices.iter_mut() {
+                if v.w <= 0.0 {
+                    continue;
+                }
+                let dv = v_cm - v.velocity;
+                v.velocity += k_damping * dv;
+            }
+            continue;
+        }
         let (x_cm, v_cm) = physics::center_of_mass(&vertices);
         let L = vertices
             .iter()
@@ -258,8 +284,14 @@ impl PBDSolver {
         for _ in 0..20 {
             project_constraints(&mut ps, &velocities,&bs, &inv_masses, &constraints);
         }
+        let inv_dt = 1.0 / dt;
+        let vlim: f32 = 80.0;
         for (v, p) in physics_vertices.iter_mut().zip(ps.iter()) {
-            v.velocity = (p - v.position) / dt;
+            let mut vel = (*p - v.position) * inv_dt;
+            vel.x = vel.x.clamp(-vlim, vlim);
+            vel.y = vel.y.clamp(-vlim, vlim);
+            vel.z = vel.z.clamp(-vlim, vlim);
+            v.velocity = vel;
             v.position = *p;
         }
     }

@@ -197,7 +197,7 @@ impl Default for Cube {
 impl Cube {
     pub fn example(subdivisions: usize) -> Self {
         let half = 0.25; // smaller cube (total size = 0.5)
-        let center = Vec3::new(0.0, 0.0, 1.6);
+        let center = Vec3::new(0.0, 0.0, -0.1);
 
         let mut positions = Vec::new();
         let mut indices = Vec::new();
