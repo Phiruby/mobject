@@ -49,8 +49,7 @@ pub enum Manifold {
     TwoD,
     ThreeD,
 }
-// TODO: all fields in this struct will be sent to GPU!
-// will need to drop / convert to `GraphicsVertex`
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct RenderVertex {

@@ -61,6 +61,7 @@ fn shape_matching(
 
 fn project_constraints(
     world_positions: &mut [Vec3],
+    velocities: &[Vec3],
     body_positions: &[Vec3],
     inv_masses: &[f32],
     constraints: &[PhysicsConstraint],
@@ -87,13 +88,32 @@ fn project_constraints(
         if ev.abs() <= f32::EPSILON {
             continue;
         }
+        let (o1, o2) = (world_positions[std::cmp::min(16, world_positions.len() - 1)].clone(), world_positions[std::cmp::min(17, world_positions.len() - 1)].clone());
         let grads = c.gradient(world_positions);
         let k = c.k();
         let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm_squared());
+        if denom.is_nan() { continue; }
         let s = ev / denom;
         for g in grads.iter() {
             world_positions[g.index] -= k * g.gradient * s * inv_masses[g.index];
         }
+        // if let PhysicsConstraint::Collision(q) = c {
+        //     if world_positions.len() >= 20 && world_positions[16].x == world_positions[17].x && world_positions[16].y == world_positions[17].y && world_positions[16].z == world_positions[17].z {
+        //         // dbg!(s, ev, denom, k, inv_masses[16], grads, q.vert_ind1, q.vert_ind2);
+        //         // dbg!(velocities[q.vert_ind1], velocities[q.vert_ind2]);
+        //         dbg!(c, o1, o2);
+        //         panic!("Same positions :(");
+        //     // }
+        //     // if q.inp_vertex_index == 16 {
+        //     // if q.vert_ind1 == 16 || q.vert_ind2 == 16 {
+        //     //     if world_positions[16].x.is_nan() || world_positions[16].y.is_nan() || world_positions[16].z.is_nan() {
+        //     //         dbg!(s, ev, denom, k, inv_masses[16], grads, q.vert_ind1, q.vert_ind2);
+        //     //         dbg!(velocities[q.vert_ind1], velocities[q.vert_ind2]);
+        //     //         panic!("NaN detected");
+        //     //     }
+        //     //     dbg!(world_positions[q.vert_ind1], world_positions[q.vert_ind2]);
+        //     // }
+        // }
     }
 }
 
@@ -139,7 +159,6 @@ fn generate_collision_constraints(
                     let e1 = v2.position - v1.position;
                     let e2 = v3.position - v1.position;
                     let mut n = nalgebra_glm::cross(&e1, &e2);
-                    // TODO: maybe don't need this check?
                     n = n.normalize();
 
                     let v_to_p = v - v1.position;
@@ -153,15 +172,15 @@ fn generate_collision_constraints(
                     if !barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
                         return;
                     }
-                    // if old and new in same direction relative to point of contact, skip and continue
-                    if old_ray.dot(&n) * new_ray.dot(&n) > 0.0 {
+
+                    if new_ray.dot(&n) > 0.0 {
                         return;
                     }
                     // 2D objects (e.g rectangle) will need some thickness so it doesn't stick on the surface of the collidee
                     // so we add thickness to the collision constraint
                     let mut thickness = 0.0;
                     if matches!(mobjects[old_v.mobject_id as usize].manifold(), Manifold::TwoD) {
-                        thickness = 0.0001;
+                        thickness = 0.10;
                     }
                     collisions.push(
                         PhysicsConstraint::Collision(CollisionConstraint {
@@ -226,6 +245,7 @@ impl PBDSolver {
             });
         dampen_velocities(physics_vertices, mobjects, None);
         let mut ps: Vec<Vec3> = physics_vertices.iter().map(|v| v.position + dt * v.velocity).collect();
+        let velocities = physics_vertices.iter().map(|v| v.velocity).collect::<Vec<Vec3>>();
         let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
         // NOTE: collision constraints affect attachment constraints, so need to fix
         let collision_constraints = generate_collision_constraints(
@@ -238,8 +258,8 @@ impl PBDSolver {
         let inv_masses: Vec<f32> = physics_vertices.iter().map(|v| v.w).collect();
         let bs: Vec<Vec3> = physics_vertices.iter().map(|v| v.body_space_position).collect();
         // TODO: project_constraints computes x_cm using all vertices, which is wrong; let's fix this
-        for _ in 0..15 {
-            project_constraints(&mut ps, &bs, &inv_masses, &constraints);
+        for _ in 0..20 {
+            project_constraints(&mut ps, &velocities,&bs, &inv_masses, &constraints);
         }
         for (v, p) in physics_vertices.iter_mut().zip(ps.iter()) {
             v.velocity = (p - v.position) / dt;

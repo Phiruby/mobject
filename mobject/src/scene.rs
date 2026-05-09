@@ -291,7 +291,7 @@ impl Scene {
             surface_format,
             physical_device_memory_properties
         );
-        let camera_position = glm::vec3(-2.0, -2.0, 2.0);
+        let camera_position = glm::vec3(-0.0, -2.0, 2.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);

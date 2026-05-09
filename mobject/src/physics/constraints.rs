@@ -136,16 +136,15 @@ impl Constraint for StretchConstraint {
         d - self.l0
     }
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
-        let dist = nalgebra_glm::l1_distance(&positions[self.vert_ind1], &positions[self.vert_ind2]);
-        // NOTE: downscaling by k
+        let dist = nalgebra_glm::distance(&positions[self.vert_ind1], &positions[self.vert_ind2]);
         vec![
             ConstrainedGradient {
                 index: self.vert_ind1 as usize,
-                gradient: self.k * (positions[self.vert_ind1] - positions[self.vert_ind2]) / dist
+                gradient: (positions[self.vert_ind1] - positions[self.vert_ind2]) / dist
             },
             ConstrainedGradient {
                 index: self.vert_ind2 as usize,
-                gradient: self.k * (positions[self.vert_ind2] - positions[self.vert_ind1]) / dist
+                gradient: (positions[self.vert_ind2] - positions[self.vert_ind1]) / dist
             }
         ]
     }
