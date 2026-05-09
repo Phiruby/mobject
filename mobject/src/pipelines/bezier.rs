@@ -15,7 +15,7 @@ pub struct BezierPipeline {
 impl GraphicsPipeline for BezierPipeline {
 
 
-    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static> {
+    fn get_pipeline_info(extent: Extent2D) -> CompletePipeline<'static> {
         CompletePipeline {
             extent,
             vertex_path: "shaders/bezier/vert.spv",
@@ -26,7 +26,6 @@ impl GraphicsPipeline for BezierPipeline {
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::PATCH_LIST,
             color_attachment_count: 1,
-            render_pass,
             // use to index texture element
             push_constant: Some(
                 PushConstantRange {

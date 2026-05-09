@@ -4,7 +4,7 @@ use std::ptr::copy_nonoverlapping;
 use crate::shapes::RenderVertex;
 use crate::MAX_FRAMES_IN_FLIGHT;
 use ash::vk::{
-    AccessFlags, DeviceMemory, ImageLayout, ImageMemoryBarrier, MemoryMapFlags
+    DeviceMemory, ImageMemoryBarrier, MemoryMapFlags
 };
 use ash::Device;
 use ash::{

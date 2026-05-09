@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 
-use nalgebra_glm::{Mat3, Vec3};
-use crate::{physics, scene::Mobject, shapes::PhysicsVertex};
+use nalgebra_glm::Vec3;
+use crate::physics;
 
 
 #[derive(Debug)]

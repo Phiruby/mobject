@@ -16,7 +16,6 @@ use ash::vk::{
 use nalgebra_glm as glm;
 use nalgebra_glm::{Vec2, Vec3};
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::{mem::offset_of, os::raw::c_void};
 use crate::physics::constraints::{PhysicsConstraint, ShapeConstraint, StaticConstraint};
 use crate::pipelines::Pipelines;
@@ -107,7 +106,7 @@ impl ShapeIntent {
         self.constraints = constraints;
         self
     }
-    pub fn make_static(mut self) -> Self {
+    pub fn make_static(self) -> Self {
         let s = self.entity.get_vertices().len();
         self.anchor((0..s).collect())
     }

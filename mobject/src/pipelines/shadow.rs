@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-use std::ffi::c_void;
 use ash::Instance;
-use ash::vk::{self, Buffer, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Format, Framebuffer, Image, ImageLayout, ImageUsageFlags, ImageView, IndexType, Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderStageFlags, StructureType, SubpassContents, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
+use ash::vk::{self, ClearDepthStencilValue, ClearValue, CommandBuffer, DescriptorImageInfo, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, DeviceMemory, Extent2D, Format, Image, ImageLayout, ImageUsageFlags, ImageView, IndexType, Offset2D, PhysicalDevice, PhysicalDeviceMemoryProperties, PipelineBindPoint, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderStageFlags, StructureType, SubpassContents, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
 use ash::Device;
-use crate::scene::{Mobject, Texture};
-use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, texture, window};
+use crate::scene::Mobject;
+use crate::shapes::{BuiltShape, Vertex, RenderVertex};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, texture};
 use crate::pipelines::{self, CompletePipeline, GraphicsPipeline, PipelineState};
 
 /// This pipeline is used for shadow mapping:
@@ -16,7 +14,7 @@ pub struct ShadowMapping {
 }
 
 impl GraphicsPipeline for ShadowMapping {
-    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static> {
+    fn get_pipeline_info(extent: Extent2D) -> CompletePipeline<'static> {
         CompletePipeline {
             extent,
             vertex_path: "shaders/shadow/vert.spv",
@@ -27,7 +25,6 @@ impl GraphicsPipeline for ShadowMapping {
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::TRIANGLE_LIST,
             color_attachment_count: 0,
-            render_pass,
             // use to index texture element
             push_constant: Some(
                 PushConstantRange {

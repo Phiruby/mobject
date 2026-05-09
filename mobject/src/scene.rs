@@ -1,5 +1,5 @@
 use ash::vk::{
-    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Format, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageUsageFlags, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Fence, Handle, Image, ImageAspectFlags, ImageLayout, ImageUsageFlags, ImageView, InstanceCreateInfo, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
@@ -9,13 +9,13 @@ use crate::pipelines::shadow::ShadowMapping;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
 use nalgebra_glm::{self as glm, Vec3};
-use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, PhysicsVertex, RenderVertex, Shape, ShapeIntent, primitives};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, PhysicsVertex, ShapeIntent, primitives};
 use std::collections::{HashMap, VecDeque};
 use cgmath::Vector3;
 use std::ffi::{CString, c_void};
 use std::ops::{Deref, DerefMut};
 use shapeject::SpatialHash3D;
-use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
+use crate::{window, swapchain, shaders, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::shapes::animations::AnimationProxy;
 use crate::physics::pbd::{self, PBDSolver};
@@ -61,16 +61,12 @@ enum Action {
 ///     But any future action will have to wait (e.g: adding new objects)
 /// Moving: all mobjects are freely moving
 enum SceneState {
-    Frozen,
     Waiting{ from: Instant, duration: Duration},
     Moving
 }
 
 pub struct Texture {
-    view: ImageView,
     pub idx: u32,
-    image: Image,
-    memory: DeviceMemory
 }
 
 pub struct Mobject {
@@ -106,16 +102,12 @@ pub struct Scene {
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
-    depth_image: Image,
-    depth_image_view: ImageView,
-    depth_image_memory: DeviceMemory,
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
     mobjects: Vec<Mobject>,
     animations: Vec<Anim>,
     camera_motions: VecDeque<CameraAnimation>,
 
     next_id: MobjectId,
-    extent: Extent2D,
     textures: HashMap<String, Texture>,
     texture_sampler: Sampler,
     queue_families: QueueFamilies,
@@ -188,7 +180,7 @@ impl Scene {
                 physical_device_memory_properties,
                 size_of::<GlobalUBO>() as u64,
             );
-        let (depth_image, depth_image_view, depth_image_memory, depth_image_format) =
+        let (_depth_image, depth_image_view, _depth_image_memory, depth_image_format) =
             buffers::create_depth_buffer(
                 &instance,
                 &logical_device,
@@ -312,12 +304,8 @@ impl Scene {
             window,
             command_buffer,
             swapchain,
-            depth_image,
-            depth_image_view,
-            depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
-            extent,
             textures: HashMap::new(),
             texture_sampler,
             queue_families,
@@ -419,7 +407,7 @@ impl Scene {
                 let texture_image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
                 self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
                 let idx = self.textures.len() as u32;
-                self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
+                self.textures.insert(pt.to_string(), Texture { idx });
             }
         }
         // let mut build_mobj = mobject.entity.build(&self.device, self.physical_device_properties);
@@ -456,7 +444,7 @@ impl Scene {
         let image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
         self.add_texture_to_scene(image, memory, mip_levels, image_view);
         let idx = self.textures.len() as u32;
-        self.textures.insert(String::from("blank"), Texture { view: image_view, idx, image, memory });
+        self.textures.insert(String::from("blank"), Texture { idx });
     }
 
     fn take_action(&mut self) {

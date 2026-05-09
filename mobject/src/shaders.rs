@@ -2,7 +2,7 @@ use std::os::raw::c_void;
 
 use ash::Device;
 use ash::vk::{
-    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, ImageView, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, Sampler, ShaderModule, ShaderModuleCreateInfo, StructureType, WriteDescriptorSet
+    self, Buffer, DescriptorBindingFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutBindingFlagsCreateInfo, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, ImageView, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, Sampler, StructureType, WriteDescriptorSet
 };
 
 use crate::MAX_FRAMES_IN_FLIGHT;

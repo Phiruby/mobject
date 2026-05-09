@@ -1,10 +1,6 @@
 use mobject::Scene;
-use mobject::shapes::Triangle;
 // use mobject::shapes::surface::Surface3D;
-use mobject::shapes::{ObjModel, Points, Rectangle, Cube, objects::Cloth};
-use nalgebra_glm as glm;
-use nalgebra_glm::{Mat4, Vec3};
-use mobject::physics::constraints::{PhysicsConstraint, StaticConstraint, StretchConstraint};
+use mobject::shapes::{Cube, objects::Cloth};
 
 
 fn main() {
@@ -18,9 +14,9 @@ fn main() {
     scene.add_baseplate();
     scene.wait(3);
     // scene.wait(3);
-    let r = scene.add(rect);
+    let _r = scene.add(rect);
     scene.wait(10);
-    let c = scene.add(c);
+    let _c = scene.add(c);
     // scene.attach(c, 90, r, 0);
     // scene.attach(c, 99, r, 1);
     // let cloth_indices: Vec<usize> = (90..=99).collect();
