@@ -88,7 +88,7 @@ fn project_constraints(
         if ev.abs() <= f32::EPSILON {
             continue;
         }
-        let (o1, o2) = (world_positions[std::cmp::min(16, world_positions.len() - 1)].clone(), world_positions[std::cmp::min(17, world_positions.len() - 1)].clone());
+        // NOTE: check if latest position is even
         let grads = c.gradient(world_positions);
         let k = c.k();
         let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm_squared());
@@ -122,11 +122,6 @@ pub fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>,
     for mobj in mobjects.iter_mut() {
         mobj.update_spatial_hash(spatial_hash, mobj.id);
     }
-}
-
-fn barycentric_test(p: &Vec3, a: &Vec3, b: &Vec3, c: &Vec3) -> bool {
-    let (u, v, w) = physics::get_barycentric_coords(p, a, b, c);
-    u >= 0.0 && v >= 0.0 && w >= 0.0
 }
 
 fn generate_collision_constraints(
@@ -169,9 +164,9 @@ fn generate_collision_constraints(
                     if matches!(m.manifold(), Manifold::TwoD) && old_ray.dot(&n) < 0.0 {
                         n = -n;
                     }
-                    if !barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
-                        return;
-                    }
+                    // if !physics::barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
+                    //     return;
+                    // }
 
                     if new_ray.dot(&n) > 0.0 {
                         return;
@@ -180,14 +175,16 @@ fn generate_collision_constraints(
                     // so we add thickness to the collision constraint
                     let mut thickness = 0.0;
                     if matches!(mobjects[old_v.mobject_id as usize].manifold(), Manifold::TwoD) {
-                        thickness = 0.10;
+                        thickness = 0.001;
                     }
                     collisions.push(
                         PhysicsConstraint::Collision(CollisionConstraint {
                             inp_vertex_index: j,
-                            q: q_c,
                             n: n,
-                            thickness
+                            thickness,
+                            v1: v1.position,
+                            v2: v2.position,
+                            v3: v3.position
                         }
                     ));
                 })

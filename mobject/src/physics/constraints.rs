@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use nalgebra_glm::{Mat3, Vec3};
-use crate::{scene::Mobject, shapes::PhysicsVertex};
+use crate::{physics, scene::Mobject, shapes::PhysicsVertex};
 
 
 #[derive(Debug)]
@@ -56,9 +56,11 @@ pub struct ShapeConstraint {
 #[derive(Clone, Debug)]
 pub struct CollisionConstraint {
     pub inp_vertex_index: usize,
-    pub q: Vec3,
     pub n: Vec3,
-    pub thickness: f32
+    pub thickness: f32,
+    pub v1: Vec3,
+    pub v2: Vec3,
+    pub v3: Vec3
 }
 
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
@@ -117,7 +119,13 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index] - self.q).dot(&self.n) - self.thickness
+        let v_to_p = positions[self.inp_vertex_index] - self.v1;
+        let dist = nalgebra_glm::dot(&v_to_p, &self.n);
+        let q_c = positions[self.inp_vertex_index] - (dist * self.n);
+        if !(physics::barycentric_test(&q_c, &self.v1, &self.v2, &self.v3)) {
+            return 0.0;
+        }
+        (positions[self.inp_vertex_index] - q_c).dot(&self.n) - self.thickness
     }
     fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
         vec![

@@ -66,3 +66,8 @@ pub fn get_barycentric_coords(p: &Vec3, a: &Vec3, b: &Vec3, c: &Vec3) -> (f32, f
     let u = 1.0 - v - w;
     (u, v, w)
 }
+
+pub fn barycentric_test(p: &Vec3, a: &Vec3, b: &Vec3, c: &Vec3) -> bool {
+    let (u, v, w) = get_barycentric_coords(p, a, b, c);
+    u >= -0.6 && v >= -0.6 && w >= -0.6
+}
