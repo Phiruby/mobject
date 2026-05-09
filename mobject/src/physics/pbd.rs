@@ -1,12 +1,10 @@
 use cgmath::Vector3;
 use nalgebra_glm::{Vec3, Mat3};
 use shapeject::SpatialHash3D;
-use spatial_hash_3d::SpatialHashGrid;
-use crate::physics::constraints::{self, CollisionConstraint, Constraint, Equality, PhysicsConstraint};
+use crate::physics::constraints::{CollisionConstraint, Constraint, Equality, PhysicsConstraint};
 use crate::shapes::{Manifold, PhysicsVertex};
 use crate::{scene::Mobject};
 use crate::physics;
-use nalgebra::{Complex, Matrix3, Matrix3x2, SVD};
 
 // add a small offset to 2d manifolds (avoid "glitching" in and out of the collidee, for instance)
 pub const SURFACE_OFFSET: f32 = 0.012;
@@ -26,7 +24,7 @@ fn shape_matching(
         .zip(inv_masses.iter())
         .filter(|((_, _), m)| **m > 0.0)
         .map(
-            |((w, b), &m)| nalgebra_glm::outer_product(&(w - current_com), b)
+            |((w, b), _)| nalgebra_glm::outer_product(&(w - current_com), b)
         )
         .sum::<nalgebra_glm::Mat3>();
     // TODO: can precompute this at the beginning
@@ -34,28 +32,28 @@ fn shape_matching(
         .iter()
         .zip(inv_masses.iter())
         .filter(|(_, m)| **m > 0.0)
-        .map(|(b, &m)| nalgebra_glm::outer_product(b, b))
+        .map(|(b, _)| nalgebra_glm::outer_product(b, b))
         .sum::<nalgebra_glm::Mat3>();
 
     let m2_inv = m2
         .try_inverse()
         .expect("Body space coords must be rank 3");
 
-    let A = m1 * m2_inv;
-    let svd = A.svd(true, true);
-    let mut U = svd.u.unwrap();
-    let V = svd.v_t.unwrap();
-    let mut R = U * V;
-    if R.determinant() < 0.0 {
-        U.column_mut(2).scale_mut(-1.0);
-        R = U * V;
+    let mat_a = m1 * m2_inv;
+    let svd = mat_a.svd(true, true);
+    let mut mat_u = svd.u.unwrap();
+    let mat_v = svd.v_t.unwrap();
+    let mut mat_r = mat_u * mat_v;
+    if mat_r.determinant() < 0.0 {
+        mat_u.column_mut(2).scale_mut(-1.0);
+        mat_r = mat_u * mat_v;
     }
     for ((w, b), inv_m) in world_positions.iter_mut().zip(body_positions.iter()).zip(inv_masses.iter()) {
         // inf mass, skip
         if (*inv_m) == 0.0 {
             continue;
         }
-        let p = R * b;
+        let p = mat_r * b;
         *w = p + current_com;
     }
 
@@ -63,7 +61,6 @@ fn shape_matching(
 
 fn project_constraints(
     world_positions: &mut [Vec3],
-    velocities: &[Vec3],
     body_positions: &[Vec3],
     inv_masses: &[f32],
     constraints: &[PhysicsConstraint],
@@ -104,23 +101,6 @@ fn project_constraints(
         for g in grads.iter() {
             world_positions[g.index] -= k * g.gradient * s * inv_masses[g.index];
         }
-        // if let PhysicsConstraint::Collision(q) = c {
-        //     if world_positions.len() >= 20 && world_positions[16].x == world_positions[17].x && world_positions[16].y == world_positions[17].y && world_positions[16].z == world_positions[17].z {
-        //         // dbg!(s, ev, denom, k, inv_masses[16], grads, q.vert_ind1, q.vert_ind2);
-        //         // dbg!(velocities[q.vert_ind1], velocities[q.vert_ind2]);
-        //         dbg!(c, o1, o2);
-        //         panic!("Same positions :(");
-        //     // }
-        //     // if q.inp_vertex_index == 16 {
-        //     // if q.vert_ind1 == 16 || q.vert_ind2 == 16 {
-        //     //     if world_positions[16].x.is_nan() || world_positions[16].y.is_nan() || world_positions[16].z.is_nan() {
-        //     //         dbg!(s, ev, denom, k, inv_masses[16], grads, q.vert_ind1, q.vert_ind2);
-        //     //         dbg!(velocities[q.vert_ind1], velocities[q.vert_ind2]);
-        //     //         panic!("NaN detected");
-        //     //     }
-        //     //     dbg!(world_positions[q.vert_ind1], world_positions[q.vert_ind2]);
-        //     // }
-        // }
     }
 }
 
@@ -137,7 +117,6 @@ fn generate_collision_constraints(
     new_mobj_positions: &[Vec3],
     spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
 ) -> Vec<PhysicsConstraint> {
-    let mut bee = false;
     let mut collisions: Vec<PhysicsConstraint> = Vec::new();
     for (j, (v, old_v)) in new_mobj_positions
         .iter()
@@ -231,16 +210,16 @@ fn dampen_velocities(
             continue;
         }
         let (x_cm, v_cm) = physics::center_of_mass(&vertices);
-        let L = vertices
+        let mat_l = vertices
             .iter()
             // NOTE: infinite mass => velocity 0 anyways
             .filter(|x| x.w > 0.0)
             .fold(Vec3::new(0.0, 0.0, 0.0), |acc, x| acc + nalgebra_glm::cross(&(x.position - x_cm),  &x.velocity) * (1.0 / x.w));
-        let I = vertices
+        let mat_i = vertices
             .iter()
             .filter(|x| x.w > 0.0)
             .fold(Mat3::zeros(), |acc, x| acc + (1.0 / x.w) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)).transpose());
-        let omega = I.try_inverse().unwrap() * L;
+        let omega = mat_i.try_inverse().unwrap() * mat_l;
         for v in vertices.iter_mut() {
             if v.w <= 0.0 { continue; }
             let dv = v_cm - nalgebra_glm::cross(&(v.position - x_cm), &omega) - v.velocity;
@@ -268,7 +247,6 @@ impl PBDSolver {
             });
         dampen_velocities(physics_vertices, mobjects, None);
         let mut ps: Vec<Vec3> = physics_vertices.iter().map(|v| v.position + dt * v.velocity).collect();
-        let velocities = physics_vertices.iter().map(|v| v.velocity).collect::<Vec<Vec3>>();
         let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
         // NOTE: collision constraints affect attachment constraints, so need to fix
         let collision_constraints = generate_collision_constraints(
@@ -282,7 +260,7 @@ impl PBDSolver {
         let bs: Vec<Vec3> = physics_vertices.iter().map(|v| v.body_space_position).collect();
         // TODO: project_constraints computes x_cm using all vertices, which is wrong; let's fix this
         for _ in 0..20 {
-            project_constraints(&mut ps, &velocities,&bs, &inv_masses, &constraints);
+            project_constraints(&mut ps,&bs, &inv_masses, &constraints);
         }
         let inv_dt = 1.0 / dt;
         let vlim: f32 = 80.0;

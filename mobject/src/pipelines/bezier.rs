@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
-use ash::vk::{self, Buffer, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
+use ash::vk::{self, Buffer, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, PhysicalDeviceMemoryProperties, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
-use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, window};
+use crate::shapes::{BuiltShape, Vertex, RenderVertex};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders};
 use crate::pipelines::{self, CompletePipeline, GraphicsPipeline, PipelineState};
 
 pub struct BezierPipeline {
-    // device: &'a Device,
     state: PipelineState
 }
 

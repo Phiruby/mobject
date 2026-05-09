@@ -138,7 +138,7 @@ impl Cloth {
             width,
             height,
             &positions,
-            1.0,
+            0.2,
         ));
 
         Self::new()

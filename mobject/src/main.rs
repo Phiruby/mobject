@@ -8,24 +8,27 @@ use mobject::physics::constraints::{PhysicsConstraint, StaticConstraint, Stretch
 
 
 fn main() {
-    let rect = Cube::example(5)
+    let rect = Cube::default()
         .finish_construction()
         .make_rigid();
-    let c = Cloth::example().anchor(vec![0, 9]);
+    // dbg!(rect.entity.get_vertices().iter().map(|v| v.position).collect::<Vec<Vec3>>());
+    let c = Cloth::example();
+    // dbg!(c.entity.get_vertices().iter().map(|v| v.position).collect::<Vec<Vec3>>());
     let mut scene = Scene::new();
-    // scene.add_baseplate();
+    scene.add_baseplate();
     scene.wait(3);
-    let c = scene.add(c);
     // scene.wait(3);
     let r = scene.add(rect);
+    scene.wait(10);
+    let c = scene.add(c);
     // scene.attach(c, 90, r, 0);
     // scene.attach(c, 99, r, 1);
-    let cloth_indices: Vec<usize> = (90..=99).collect();
-    let cube_indices = Cube::edge_indices_top_front(5);
+    // let cloth_indices: Vec<usize> = (90..=99).collect();
+    // let cube_indices = Cube::edge_indices_top_front(5);
 
-    for (ci, ri) in cloth_indices.iter().zip(cube_indices.iter()) {
-        scene.attach(c, *ci, r, *ri);
-    }
+    // for (ci, ri) in cloth_indices.iter().zip(cube_indices.iter()) {
+    //     scene.attach(c, *ci, r, *ri);
+    // }
     scene.wait(8);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
 
