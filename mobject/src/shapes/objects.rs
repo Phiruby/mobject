@@ -140,7 +140,6 @@ impl Cloth {
             &positions,
             0.5,
         ));
-        let total = vertices.len();
         Self::new()
         .with_vertices(vertices)
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)

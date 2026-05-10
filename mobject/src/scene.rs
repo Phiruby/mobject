@@ -514,7 +514,7 @@ impl Scene {
                 self.take_action();
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
-            self.solver.update(&self.mobjects, &mut self.physics_vertices, &self.constraints, &mut self.spatial_hash, 0.01);
+            self.solver.update(&self.mobjects, &mut self.physics_vertices, &self.constraints, &mut self.spatial_hash, 0.002);
             self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(&self.physics_vertices); });
             pbd::rebuild_spatial_hash(&mut self.spatial_hash, &mut self.mobjects);
 

@@ -125,8 +125,7 @@ impl Constraint for CollisionConstraint {
         let q_c = p - (dist * self.n);
 
         if !physics::barycentric_test(&q_c, &v1, &v2, &v3) {
-            // NOTE: returning > 0 since inequality constraint
-            return 1.0;
+            return 0.0;
         }
 
         dist - self.thickness
