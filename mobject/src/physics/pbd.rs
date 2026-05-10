@@ -7,7 +7,7 @@ use crate::{scene::Mobject};
 use crate::physics;
 
 // add a small offset to 2d manifolds (avoid "glitching" in and out of the collidee, for instance)
-pub const SURFACE_OFFSET: f32 = 0.012;
+pub const SURFACE_OFFSET: f32 = 0.062;
 
 pub struct PBDSolver ();
 
@@ -111,6 +111,12 @@ pub fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>,
     }
 }
 
+/// Generates collision constraints for all vertices in the scene;
+/// the procedure separates 2D and 3D colidees.
+/// this is because normals of 2D collidees do not have a notion of "inside" or "outside"
+/// so we need to handle them differently. Apart from this edge case, this is standard (I think):
+/// we check spatial hash for collisions, perform barycentric test (if the projection lies in the collider's triangle),
+/// and if it does, add a collision constraint
 fn generate_collision_constraints(
     mobjects: &[Mobject],
     physics_vertices: &[PhysicsVertex],
@@ -118,65 +124,72 @@ fn generate_collision_constraints(
     spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
 ) -> Vec<PhysicsConstraint> {
     let mut collisions: Vec<PhysicsConstraint> = Vec::new();
-    for (j, (v, old_v)) in new_mobj_positions
+
+    for (j, (v_new, old_v)) in new_mobj_positions
         .iter()
         .zip(physics_vertices.iter())
-        .enumerate() {
-        if old_v.w <= 0.0 { continue ; }
-        let pos = Vector3::new(v.x, v.y, v.z);
+        .enumerate()
+    {
+        if old_v.w <= 0.0 { continue; }
+
+        let pos = Vector3::new(v_new.x, v_new.y, v_new.z);
         spatial_hash
             .iter_cubes(pos, pos)
             .for_each(|(_, ent)| {
-                ent.iter().for_each(|(mobj_id, i)| {
-                    // NOTE: skipping self-collision
-                    if *mobj_id == old_v.mobject_id {
-                        return ;
-                    }
-                    let m: &Mobject = &mobjects[*mobj_id as usize];
-                    let (start, total) = m.get_physics_index_range();
+                ent.iter().for_each(|(mobj_id, face_idx)| {
+                    if *mobj_id == old_v.mobject_id { return; }
+
+                    let m_collidee = &mobjects[*mobj_id as usize];
+                    let (start, total) = m_collidee.get_physics_index_range();
                     let adj_vertices = &physics_vertices[start..start + total];
-                    let indices = m.indices();
-                    let (v1, v2, v3) = (&adj_vertices[indices[*i * 3] as usize], &adj_vertices[indices[*i*3 + 1] as usize], &adj_vertices[indices[*i*3 + 2] as usize]);
-                    let e1 = v2.position - v1.position;
-                    let e2 = v3.position - v1.position;
+                    let indices = m_collidee.indices();
+
+                    let v1 = adj_vertices[indices[*face_idx * 3] as usize].position;
+                    let v2 = adj_vertices[indices[*face_idx * 3 + 1] as usize].position;
+                    let v3 = adj_vertices[indices[*face_idx * 3 + 2] as usize].position;
+
+                    let e1 = v2 - v1;
+                    let e2 = v3 - v1;
                     let cross = nalgebra_glm::cross(&e1, &e2);
                     let clen = nalgebra_glm::length(&cross);
-                    if clen < 1e-12 {
-                        return;
-                    }
-                    let mut n = cross / clen;
+                    if clen < 1e-12 { return; }
+                    let n = cross / clen;
 
-                    let v_to_p = v - v1.position;
-                    let dist = nalgebra_glm::dot(&v_to_p, &n);
-                    let q_c = v - (dist * n);
-                    let old_ray: Vec3 = old_v.position - q_c;
-                    let new_ray = v - q_c;
-                    if matches!(m.manifold(), Manifold::TwoD) && old_ray.dot(&n) < 0.0 {
-                        n = -n;
-                    }
-                    if !physics::barycentric_test(&q_c, &v1.position, &v2.position, &v3.position) {
-                        return;
-                    }
+                    let v_to_p = v_new - v1;
+                    let dist_new = nalgebra_glm::dot(&v_to_p, &n);
+                    let q_c = v_new - (dist_new * n);
 
-                    if new_ray.dot(&n) > 0.0 {
-                        return;
-                    }
-                    // 2D objects (e.g rectangle) will need some thickness so it doesn't stick on the surface of the collidee
-                    // so we add thickness to the collision constraint
-                    let mut thickness = 0.0;
-                    if matches!(mobjects[old_v.mobject_id as usize].manifold(), Manifold::TwoD) {
-                        thickness = SURFACE_OFFSET;
-                    }
-                    collisions.push(
-                        PhysicsConstraint::Collision(CollisionConstraint {
-                            inp_vertex_index: j,
-                            n: n,
-                            thickness,
-                            v1: v1.position,
-                            v2: v2.position,
-                            v3: v3.position
+                    if !physics::barycentric_test(&q_c, &v1, &v2, &v3) { return; }
+
+                    let mut final_n = n;
+                    let mut should_collide = false;
+
+                    match m_collidee.manifold() {
+                        Manifold::ThreeD => {
+                            if dist_new < SURFACE_OFFSET {
+                                should_collide = true;
+                            }
                         }
-                    ));
+                        Manifold::TwoD => {
+                            let dist_old = nalgebra_glm::dot(&(old_v.position - v1), &n);
+
+                            if dist_old.signum() != dist_new.signum() || dist_new.abs() < SURFACE_OFFSET {
+                                should_collide = true;
+                                if dist_old < 0.0 {
+                                    final_n = -n;
+                                }
+                            }
+                        }
+                    }
+
+                    if should_collide {
+                        collisions.push(PhysicsConstraint::Collision(CollisionConstraint {
+                            inp_vertex_index: j,
+                            n: final_n,
+                            thickness: SURFACE_OFFSET,
+                            triangle_indices: [indices[*face_idx * 3] as usize, indices[*face_idx * 3 + 1] as usize, indices[*face_idx * 3 + 2] as usize],
+                        }));
+                    }
                 })
             });
     }
@@ -195,7 +208,7 @@ fn dampen_velocities(
         if vertices.iter().all(|x| x.w <= 0.0) {
             continue;
         }
-        let k_damping = k_damping.unwrap_or(0.5);
+        let k_damping = k_damping.unwrap_or(0.1);
         // skipping angular damping for 2d manifolds
         // since it caused flinging behavior (not sure why!)
         if matches!(m.manifold(), Manifold::TwoD) {

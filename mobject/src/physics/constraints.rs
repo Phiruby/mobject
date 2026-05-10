@@ -55,11 +55,9 @@ pub struct ShapeConstraint {
 #[derive(Clone, Debug)]
 pub struct CollisionConstraint {
     pub inp_vertex_index: usize,
+    pub triangle_indices: [usize; 3],
     pub n: Vec3,
     pub thickness: f32,
-    pub v1: Vec3,
-    pub v2: Vec3,
-    pub v3: Vec3
 }
 
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
@@ -118,27 +116,44 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        let v_to_p = positions[self.inp_vertex_index] - self.v1;
-        let dist = nalgebra_glm::dot(&v_to_p, &self.n);
-        let q_c = positions[self.inp_vertex_index] - (dist * self.n);
-        if !(physics::barycentric_test(&q_c, &self.v1, &self.v2, &self.v3)) {
-            return 0.0;
+        let p = positions[self.inp_vertex_index];
+        let v1 = positions[self.triangle_indices[0]];
+        let v2 = positions[self.triangle_indices[1]];
+        let v3 = positions[self.triangle_indices[2]];
+        let v_to_p = p - v1;
+        let dist = v_to_p.dot(&self.n);
+        let q_c = p - (dist * self.n);
+
+        if !physics::barycentric_test(&q_c, &v1, &v2, &v3) {
+            // NOTE: returning > 0 since inequality constraint
+            return 1.0;
         }
-        (positions[self.inp_vertex_index] - q_c).dot(&self.n) - self.thickness
+
+        dist - self.thickness
     }
-    fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
+
+    fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
+        let p = positions[self.inp_vertex_index];
+        let v1 = positions[self.triangle_indices[0]];
+        let v2 = positions[self.triangle_indices[1]];
+        let v3 = positions[self.triangle_indices[2]];
+
+        let v_to_p = p - v1;
+        let dist = v_to_p.dot(&self.n);
+        let q_c = p - (dist * self.n);
+        let (w1, w2, w3) = physics::get_barycentric_coords(&q_c, &v1, &v2, &v3);
+
         vec![
-            ConstrainedGradient {
-                index: self.inp_vertex_index as usize,
-                gradient: self.n
-            }
+            ConstrainedGradient { index: self.inp_vertex_index, gradient: self.n },
+            ConstrainedGradient { index: self.triangle_indices[0], gradient: -self.n * w1 },
+            ConstrainedGradient { index: self.triangle_indices[1], gradient: -self.n * w2 },
+            ConstrainedGradient { index: self.triangle_indices[2], gradient: -self.n * w3 },
         ]
     }
 }
 
 impl Constraint for StretchConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        // nalgebra_glm::l1_distance(&positions[self.vert_ind1], &positions[self.vert_ind2]) - self.l0
         let d = nalgebra_glm::distance(&positions[self.vert_ind1], &positions[self.vert_ind2]);
         d - self.l0
     }
