@@ -1,12 +1,14 @@
 use mobject::Scene;
 // use mobject::shapes::surface::Surface3D;
 use mobject::shapes::{Cube, objects::Cloth};
+use nalgebra_glm::Vec3;
 
 
 fn main() {
     let rect = Cube::default()
         .finish_construction()
-        .make_rigid();
+        .make_rigid()
+        .with_velocities(vec![Vec3::new(0.0, 1.5, 0.0); 8]);
     // dbg!(rect.entity.get_vertices().iter().map(|v| v.position).collect::<Vec<Vec3>>());
     let c = Cloth::example();
     // dbg!(c.entity.get_vertices().iter().map(|v| v.position).collect::<Vec<Vec3>>());
@@ -14,18 +16,19 @@ fn main() {
     scene.add_baseplate();
     scene.wait(3);
     // scene.wait(3);
-    let _r = scene.add(rect);
-    scene.wait(10);
-    let _c = scene.add(c);
-    // scene.attach(c, 90, r, 0);
-    // scene.attach(c, 99, r, 1);
-    // let cloth_indices: Vec<usize> = (90..=99).collect();
+    // scene.wait(10);
+    // scene.wait(5);
+    let r = scene.add(rect);
+    let c = scene.add(c);
+    // scene.attach(c, 30, r, 0);
+    // scene.attach(c, 36, r, 1);
+    // let cloth_indices: Vec<usize> = (30..=36).collect();
     // let cube_indices = Cube::edge_indices_top_front(5);
 
     // for (ci, ri) in cloth_indices.iter().zip(cube_indices.iter()) {
     //     scene.attach(c, *ci, r, *ri);
     // }
-    scene.wait(8);
+    // scene.wait(8);
     // let obj = Box::new(ObjModel::load("models/room.obj").include_texture("textures/viking_room.png"));
 
     // let rect = Box::new(
