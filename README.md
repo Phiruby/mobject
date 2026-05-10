@@ -74,3 +74,8 @@ The following reads were used in implementing this engine:
 1. Position based dynamics: https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
 2. Shape Matching (to mantain rigid bodies): https://matthias-research.github.io/pages/publications/Physically_Based_Shape_Matching___SCA_2022.pdf
 3. A general overview of force-based physics simulators (the main takeaway used here is the section on collisions- these were helpful to distinguish between 2D and 3D objects colliding for example): https://www.cs.cmu.edu/~baraff/pbm/rigid1.pdf
+
+## Things to address in the future
+1. Shadows display the "peter-panning" effect (see https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping)
+2. Aliasing artifacts: can improve by adding filtering / mipmaps
+3. `dt` is hardcoded in physics sim: each frame has a fixed `dt` increment
