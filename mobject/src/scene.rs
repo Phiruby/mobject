@@ -191,7 +191,6 @@ impl Scene {
             );
 
         let sync = window::create_sync_objects(&logical_device);
-        // let shadow_barriers = window::create_image_barriers(&shadow_depth_image);
 
         let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device,
         vk::FALSE, vk::CompareOp::ALWAYS);
@@ -283,7 +282,7 @@ impl Scene {
             surface_format,
             physical_device_memory_properties
         );
-        let camera_position = glm::vec3(-0.0, -2.0, 2.0);
+        let camera_position = glm::vec3(-0.0, -3.0, 3.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);

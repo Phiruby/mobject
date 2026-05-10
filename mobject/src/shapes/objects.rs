@@ -34,7 +34,7 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
             positions.push(Vec3::new(
                 x as f32 * spacing - half_w,
                 y as f32 * spacing - half_h,
-                0.85
+                1.0
             ));
             tex_coords.push(Vec2::new(x as f32 / width as f32, y as f32 / height as f32));
         }
@@ -138,15 +138,14 @@ impl Cloth {
             width,
             height,
             &positions,
-            0.2,
+            0.5,
         ));
-
+        let total = vertices.len();
         Self::new()
         .with_vertices(vertices)
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)
         .with_texture(String::from("textures/cloth.jpg"))
         .finish_construction()
-        // .anchor(vec![0, width - 1])
         .with_constraints(constraints)
     }
 }

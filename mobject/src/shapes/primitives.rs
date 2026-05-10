@@ -146,16 +146,17 @@ impl Default for Rectangle {
 
 impl Default for Cube {
     fn default() -> Self {
+        let offset = Vec3::new(0.0, 0.0, 1.0);
         let positions = vec![
-            Vec3::new(-0.25, -0.25,  2.0),
-            Vec3::new( 0.25, -0.25,  2.0),
-            Vec3::new( 0.25,  0.25,  2.0),
-            Vec3::new(-0.25,  0.25,  2.0),
+            Vec3::new(-0.15, -0.15,  0.6) + offset,
+            Vec3::new( 0.15, -0.15,  0.6) + offset,
+            Vec3::new( 0.15,  0.15,  0.6) + offset,
+            Vec3::new(-0.15,  0.15,  0.6) + offset,
 
-            Vec3::new(-0.25, -0.25, 1.5),
-            Vec3::new( 0.25, -0.25, 1.5),
-            Vec3::new( 0.25,  0.25, 1.5),
-            Vec3::new(-0.25,  0.25, 1.5),
+            Vec3::new(-0.15, -0.15, 0.10) + offset,
+            Vec3::new( 0.15, -0.15, 0.10) + offset,
+            Vec3::new( 0.15,  0.15, 0.10) + offset,
+            Vec3::new(-0.15,  0.15, 0.10) + offset,
         ];
 
         let indices: Vec<usize> = vec![
@@ -181,7 +182,7 @@ impl Default for Cube {
             .map(|(pos, norm)| {
                 RenderVertex::new(
                     pos,
-                    Vec3::new(1.0, 0.0, 0.0), // color
+                    Vec3::new(1.0, 0.0, 0.0),
                     norm,
                     None,
                 )
@@ -197,7 +198,7 @@ impl Default for Cube {
 impl Cube {
     pub fn example(subdivisions: usize) -> Self {
         let half = 0.25; // smaller cube (total size = 0.5)
-        let center = Vec3::new(0.0, 0.0, -0.1);
+        let center = Vec3::new(0.0, 0.0, 1.4);
 
         let mut positions = Vec::new();
         let mut indices = Vec::new();
