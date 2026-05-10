@@ -1,13 +1,15 @@
 use std::collections::HashMap;
-
 use cgmath::Vector3;
 use nalgebra_glm::{Vec3, Mat3};
 use shapeject::SpatialHash3D;
-use spatial_hash_3d::SpatialHashGrid;
 use crate::physics::constraints::{CollisionConstraint, Constraint, Equality, PhysicsConstraint};
+use crate::shapes::{Manifold, PhysicsVertex};
 use crate::{scene::Mobject};
 use crate::physics;
-use nalgebra::{Complex, Matrix3, Matrix3x2, SVD};
+
+// add a small offset to 2d manifolds (avoid "glitching" in and out of the collidee, for instance)
+pub const SURFACE_OFFSET: f32 = 0.012;
+
 pub struct PBDSolver ();
 
 /// Implementation of https://matthias-research.github.io/pages/publications/MeshlessDeformations_SIG05.pdf
@@ -23,7 +25,7 @@ fn shape_matching(
         .zip(inv_masses.iter())
         .filter(|((_, _), m)| **m > 0.0)
         .map(
-            |((w, b), &m)| nalgebra_glm::outer_product(&(w - current_com), b)
+            |((w, b), _)| nalgebra_glm::outer_product(&(w - current_com), b)
         )
         .sum::<nalgebra_glm::Mat3>();
     // TODO: can precompute this at the beginning
@@ -31,28 +33,28 @@ fn shape_matching(
         .iter()
         .zip(inv_masses.iter())
         .filter(|(_, m)| **m > 0.0)
-        .map(|(b, &m)| nalgebra_glm::outer_product(b, b))
+        .map(|(b, _)| nalgebra_glm::outer_product(b, b))
         .sum::<nalgebra_glm::Mat3>();
 
     let m2_inv = m2
         .try_inverse()
         .expect("Body space coords must be rank 3");
 
-    let A = m1 * m2_inv;
-    let svd = A.svd(true, true);
-    let mut U = svd.u.unwrap();
-    let V = svd.v_t.unwrap();
-    let mut R = U * V;
-    if R.determinant() < 0.0 {
-        U.column_mut(2).scale_mut(-1.0);
-        R = U * V;
+    let mat_a = m1 * m2_inv;
+    let svd = mat_a.svd(true, true);
+    let mut mat_u = svd.u.unwrap();
+    let mat_v = svd.v_t.unwrap();
+    let mut mat_r = mat_u * mat_v;
+    if mat_r.determinant() < 0.0 {
+        mat_u.column_mut(2).scale_mut(-1.0);
+        mat_r = mat_u * mat_v;
     }
     for ((w, b), inv_m) in world_positions.iter_mut().zip(body_positions.iter()).zip(inv_masses.iter()) {
         // inf mass, skip
         if (*inv_m) == 0.0 {
             continue;
         }
-        let p = R * b;
+        let p = mat_r * b;
         *w = p + current_com;
     }
 
@@ -65,10 +67,16 @@ fn project_constraints(
     constraints: &[PhysicsConstraint],
 ) {
     for c in constraints {
-        let current_com = physics::raw_center_of_mass(world_positions, inv_masses);
         // TODO: hacking over rigid constraint
-        if let PhysicsConstraint::RigidBody(_) = c {
-            shape_matching(world_positions, current_com, body_positions, inv_masses);
+        if let PhysicsConstraint::RigidBody(x) = c {
+            let start = x.start_physics_vertices_idx;
+            let end = start + x.total_physics_vertices;
+
+            let wp = &mut world_positions[start..end];
+            let inv_mass: &[f32] = &inv_masses[start..end];
+            let current_com = physics::raw_center_of_mass(wp, inv_mass);
+            let bp: &[Vec3] = &body_positions[start..end];
+            shape_matching(wp, current_com, bp, inv_mass);
             continue;
         }
         let ev = c.evaluate(world_positions);
@@ -80,118 +88,220 @@ fn project_constraints(
         if ev.abs() <= f32::EPSILON {
             continue;
         }
+        // NOTE: check if latest position is even
         let grads = c.gradient(world_positions);
-        let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm());
+        if grads.is_empty() {
+            continue;
+        }
+        let k = c.k();
+        let denom = grads.iter().fold(0.0, |acc, grad| acc + inv_masses[grad.index] * grad.gradient.norm_squared());
+        if denom.is_nan() || denom <= f32::EPSILON {
+            continue;
+        }
         let s = ev / denom;
         for g in grads.iter() {
-            world_positions[g.index] -= g.gradient * s * inv_masses[g.index];
+            world_positions[g.index] -= k * g.gradient * s * inv_masses[g.index];
         }
     }
 }
 
-fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, mobjects: &mut [Mobject]) {
+pub fn rebuild_spatial_hash(spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>, mobjects: &mut [Mobject]) {
     spatial_hash.clear(&mut |v: &mut Vec<(u32, usize)>| v.clear());
     for mobj in mobjects.iter_mut() {
         mobj.update_spatial_hash(spatial_hash, mobj.id);
     }
 }
 
+/// Generates collision constraints for all vertices in the scene;
+/// the procedure separates 2D and 3D colidees.
+/// this is because normals of 2D collidees do not have a notion of "inside" or "outside"
+/// so we need to handle them differently:
+/// we check spatial hash for collisions, perform barycentric test (if the projection lies in the collider's triangle), perform hacks (e.g best_3d hash described below)
+/// and if it does, add a collision constraint
 fn generate_collision_constraints(
-    cur_mobj_id: u32,
+    mobjects: &[Mobject],
+    physics_vertices: &[PhysicsVertex],
     new_mobj_positions: &[Vec3],
-    inverse_masses: &[f32],
     spatial_hash: &SpatialHash3D<Vec<(u32, usize)>>,
-    mobj_map: &HashMap<u32, &Mobject>,
 ) -> Vec<PhysicsConstraint> {
     let mut collisions: Vec<PhysicsConstraint> = Vec::new();
-    for (j, (v, &w)) in new_mobj_positions.iter().zip(inverse_masses.iter()).enumerate() {
-        if w <= 0.0 { continue ; }
-        let pos = Vector3::new(v.x, v.y, v.z);
-        spatial_hash
-            .iter_cubes(pos, pos)
-            .for_each(|(_, ent)| {
-                ent.iter().for_each(|(mobj_id, i)| {
-                    // NOTE: skipping self-collision
-                    if *mobj_id == cur_mobj_id {
-                        return ;
-                    }
-                    let m = mobj_map.get(mobj_id).unwrap();
-                    let adj_vertices = m.get_physics_vertices();
-                    let indices = m.indices();
-                    let (v1, v2, v3) = (&adj_vertices[indices[*i * 3] as usize], &adj_vertices[indices[*i*3 + 1] as usize], &adj_vertices[indices[*i*3 + 2] as usize]);
-                    let e1 = v2.position - v1.position;
-                    let e2 = v3.position - v1.position;
-                    let mut n = nalgebra_glm::cross(&e1, &e2);
-                    // TODO: maybe don't need this check?
-                    let mag_sq = n.norm_squared();
-                    if mag_sq < 1e-8 {
-                        return;
-                    }
-                    n = n.normalize();
 
-                    let v_to_p = v - v1.position;
-                    let dist = nalgebra_glm::dot(&v_to_p, &n);
-                    let q_c = v - (dist * n);
-                    // took me forever to debug this! see why you need to negate?
-                    if (v - q_c).dot(&n) < 0.0 {
-                        n = -n;
-                    }
-                    collisions.push(
-                        PhysicsConstraint::Collision(CollisionConstraint {
-                            inp_vertex_index: j,
-                            q: q_c,
-                            n
+    for (j, (v_new, old_v)) in new_mobj_positions
+        .iter()
+        .zip(physics_vertices.iter())
+        .enumerate()
+    {
+        if old_v.w <= 0.0 { continue; }
+
+        let pos = Vector3::new(v_new.x, v_new.y, v_new.z);
+        // HACK: this hashmap allows us to store just one collision constraint for old_v per mobject id it collides with;
+        // this is NOT a long term fix. it's just a quick bandaid (an idea from gpt).
+        // mobj id : (distance, normal, collidee triangle)
+        let mut best_3d: HashMap<u32, (f32, Vec3, [usize; 3])> = HashMap::new();
+
+        for (_, ent) in spatial_hash.iter_cubes(pos, pos) {
+            for &(mobj_id, face_idx) in ent.iter() {
+                if mobj_id == old_v.mobject_id { continue; }
+
+                let m_collidee = &mobjects[mobj_id as usize];
+                let (start, total) = m_collidee.get_physics_index_range();
+                let adj_vertices = &physics_vertices[start..start + total];
+                let indices = m_collidee.indices();
+
+                let i0 = indices[face_idx * 3] as usize;
+                let i1 = indices[face_idx * 3 + 1] as usize;
+                let i2 = indices[face_idx * 3 + 2] as usize;
+
+                let v1 = adj_vertices[i0].position;
+                let v2 = adj_vertices[i1].position;
+                let v3 = adj_vertices[i2].position;
+
+                let e1 = v2 - v1;
+                let e2 = v3 - v1;
+                let cross = nalgebra_glm::cross(&e1, &e2);
+                let clen = nalgebra_glm::length(&cross);
+                let n = cross / clen;
+
+                let v_to_p = v_new - v1;
+                let dist_new = nalgebra_glm::dot(&v_to_p, &n);
+                let q_c = v_new - (dist_new * n);
+
+                if !physics::barycentric_test(&q_c, &v1, &v2, &v3) { continue; }
+
+                let tri_global = [start + i0, start + i1, start + i2];
+
+                match m_collidee.manifold() {
+                    Manifold::ThreeD => {
+                        if dist_new < SURFACE_OFFSET {
+                            let replace = best_3d.get(&mobj_id).map_or(true, |(best_d, _, _)| dist_new > *best_d);
+                            if replace {
+                                best_3d.insert(mobj_id, (dist_new, n, tri_global));
+                            }
                         }
-                    ));
-                })
-            });
+                    }
+                    Manifold::TwoD => {
+                        let dist_old = nalgebra_glm::dot(&(old_v.position - v1), &n);
+                        let mut final_n = n;
+                        let mut should_collide = false;
+                        if dist_old.signum() != dist_new.signum() || dist_new.abs() < SURFACE_OFFSET {
+                            should_collide = true;
+                            if dist_old < 0.0 {
+                                final_n = -n;
+                            }
+                        }
+                        if should_collide {
+                            collisions.push(PhysicsConstraint::Collision(CollisionConstraint {
+                                inp_vertex_index: j,
+                                n: final_n,
+                                thickness: SURFACE_OFFSET,
+                                triangle_indices: tri_global,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        for (_, (_, final_n, tri_global)) in best_3d {
+            collisions.push(PhysicsConstraint::Collision(CollisionConstraint {
+                inp_vertex_index: j,
+                n: final_n,
+                thickness: SURFACE_OFFSET,
+                triangle_indices: tri_global,
+            }));
+        }
     }
     collisions
+}
+
+fn dampen_velocities(
+    scene_vertices: &mut [PhysicsVertex],
+    mobjects: &[Mobject],
+    k_damping: Option<f32>
+) {
+    for m in mobjects.iter() {
+        let (start, total) = m.get_physics_index_range();
+        let vertices = &mut scene_vertices[start..start + total];
+        // if all vertices are static, return to avoid inverting I
+        if vertices.iter().all(|x| x.w <= 0.0) {
+            continue;
+        }
+        let k_damping = k_damping.unwrap_or(0.1);
+        // skipping angular damping for 2d manifolds
+        // since it caused flinging behavior (not sure why!)
+        if matches!(m.manifold(), Manifold::TwoD) {
+            let (_x_cm, v_cm) = physics::center_of_mass(vertices);
+            for v in vertices.iter_mut() {
+                if v.w <= 0.0 {
+                    continue;
+                }
+                let dv = v_cm - v.velocity;
+                v.velocity += k_damping * dv;
+            }
+            continue;
+        }
+        let (x_cm, v_cm) = physics::center_of_mass(&vertices);
+        let mat_l = vertices
+            .iter()
+            // NOTE: infinite mass => velocity 0 anyways
+            .filter(|x| x.w > 0.0)
+            .fold(Vec3::new(0.0, 0.0, 0.0), |acc, x| acc + nalgebra_glm::cross(&(x.position - x_cm),  &x.velocity) * (1.0 / x.w));
+        let mat_i = vertices
+            .iter()
+            .filter(|x| x.w > 0.0)
+            .fold(Mat3::zeros(), |acc, x| acc + (1.0 / x.w) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)) * nalgebra_glm::matrix_cross3(&(x.position - x_cm)).transpose());
+        let omega = mat_i.try_inverse().unwrap() * mat_l;
+        for v in vertices.iter_mut() {
+            if v.w <= 0.0 { continue; }
+            let dv = v_cm - nalgebra_glm::cross(&(v.position - x_cm), &omega) - v.velocity;
+            v.velocity = v.velocity + k_damping * dv;
+        }
+    }
 }
 
 impl PBDSolver {
     pub fn update(
         &mut self,
-        mobjects: &mut [Mobject],
+        mobjects: &[Mobject],
+        physics_vertices: &mut [PhysicsVertex],
+        constraints: &[PhysicsConstraint],
         spatial_hash: &mut SpatialHash3D<Vec<(u32, usize)>>,
         dt: f32
     ) {
         if mobjects.len() == 0 {
             return;
         }
-        for k in 0..mobjects.len() {
-            // HACK: this isn't looking nice whatsoever, just a workaround for now...
-            let (left, right) = mobjects.split_at_mut(k);
-            let (mobj, rest) = right.split_first_mut().unwrap();
-            let id = mobj.id;
-            let (vertices, constraints) = mobj.get_mut_vertices_and_constraints();
-            let mobj_map: HashMap<u32, &Mobject> = left.iter()
-                .chain(rest.iter())
-                .map(|m| (m.id, m))
-                .collect();
-
-            vertices.iter_mut().for_each(|v| {
+        physics_vertices
+            .iter_mut()
+            .for_each(|v| {
                 v.velocity += dt * v.w * Vec3::new(0.0, 0.0, -9.81);
             });
-
-            let mut ps: Vec<Vec3> = vertices.iter().map(|v| v.position + dt * v.velocity).collect();
-            // TODO: collision constraints
-            let collisions = generate_collision_constraints(id, &ps, &vertices.iter().map(|v| v.w).collect::<Vec<f32>>(),  spatial_hash, &mobj_map);
-            let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
-            constraints.extend(collisions.into_iter());
-
-            let inv_masses: Vec<f32> = vertices.iter().map(|v| v.w).collect();
-            let bs: Vec<Vec3> = vertices.iter().map(|v| v.body_space_position).collect();
-
-            project_constraints(&mut ps, &bs, &inv_masses, &constraints);
-
-            for (v, p) in vertices.iter_mut().zip(ps.iter()) {
-                v.velocity = (p - v.position) / dt;
-                v.position = *p;
-            }
-            let com = physics::center_of_mass(&vertices);
-            mobj.set_com(com);
+        dampen_velocities(physics_vertices, mobjects, None);
+        let mut ps: Vec<Vec3> = physics_vertices.iter().map(|v| v.position + dt * v.velocity).collect();
+        let mut constraints: Vec<PhysicsConstraint> = constraints.iter().map(|c| c.clone()).collect();
+        // NOTE: collision constraints affect attachment constraints, so need to fix
+        let collision_constraints = generate_collision_constraints(
+            mobjects,
+            physics_vertices,
+            &ps,
+            spatial_hash,
+        );
+        constraints.extend(collision_constraints.into_iter());
+        let inv_masses: Vec<f32> = physics_vertices.iter().map(|v| v.w).collect();
+        let bs: Vec<Vec3> = physics_vertices.iter().map(|v| v.body_space_position).collect();
+        // TODO: project_constraints computes x_cm using all vertices, which is wrong; let's fix this
+        for _ in 0..20 {
+            project_constraints(&mut ps,&bs, &inv_masses, &constraints);
         }
-        rebuild_spatial_hash(spatial_hash, mobjects);
+        let inv_dt = 1.0 / dt;
+        let vlim: f32 = 80.0;
+        for (v, p) in physics_vertices.iter_mut().zip(ps.iter()) {
+            let mut vel = (*p - v.position) * inv_dt;
+            vel.x = vel.x.clamp(-vlim, vlim);
+            vel.y = vel.y.clamp(-vlim, vlim);
+            vel.z = vel.z.clamp(-vlim, vlim);
+            v.velocity = vel;
+            v.position = *p;
+        }
     }
 }

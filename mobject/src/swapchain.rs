@@ -14,7 +14,6 @@ pub struct SwapchainSupport {
     pub present_modes: Vec<PresentModeKHR>,
     chosen_format: Option<SurfaceFormatKHR>,
     chosen_present_mode: Option<PresentModeKHR>,
-    extent: Option<Extent2D>,
 }
 
 pub fn query_support(
@@ -37,7 +36,6 @@ pub fn query_support(
         present_modes,
         chosen_format: None,
         chosen_present_mode: None,
-        extent: None,
     }
 }
 

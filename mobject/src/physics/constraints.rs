@@ -1,5 +1,6 @@
-use nalgebra_glm::{Mat3, Vec3};
-use crate::shapes::PhysicsVertex;
+
+use nalgebra_glm::Vec3;
+use crate::physics;
 
 
 #[derive(Debug)]
@@ -14,20 +15,22 @@ pub enum Equality {
     Inequality
 }
 
+/// Represents a constraint on vertices *within* a single mobject
+/// (for example, anything that implements this trait will not be able to
+/// apply constraints between two different mobjects)
 pub trait Constraint {
     // C(p1, ..., pn)
     fn evaluate(&self, positions: &[Vec3]) -> f32;
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient>;
-    // returns the denominator of the scaling factor, s
 }
 
 /// Attach to a particular vertex.
 /// `inp_vertex_index` represents the index of the vertex of parent `mobj` that you want to attach
 /// the `attach_to` vertex to
 #[derive(Clone, Debug)]
-pub struct AttachmentConstraint<'a> {
-    pub inp_vertex_index: usize,
-    pub attached_to: &'a PhysicsVertex
+pub struct AttachmentConstraint {
+    pub left_vertex_index: usize,
+    pub right_vertex_index: usize,
 }
 
 /// Pins to a particular point.
@@ -41,7 +44,10 @@ pub struct StaticConstraint {
 
 /// Constraint to make a mobject a rigid body
 #[derive(Clone, Debug)]
-pub struct ShapeConstraint();
+pub struct ShapeConstraint {
+    pub start_physics_vertices_idx: usize,
+    pub total_physics_vertices: usize
+}
 
 // NOTE: this can be used for both continuous and static collisions
 // provided that the right arguments are passed (it is on the caller to compute the correct)
@@ -49,8 +55,9 @@ pub struct ShapeConstraint();
 #[derive(Clone, Debug)]
 pub struct CollisionConstraint {
     pub inp_vertex_index: usize,
-    pub q: Vec3,
-    pub n: Vec3
+    pub triangle_indices: [usize; 3],
+    pub n: Vec3,
+    pub thickness: f32,
 }
 
 /// Implements C_stretch from https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
@@ -65,25 +72,32 @@ pub struct StretchConstraint {
 
 #[derive(Clone, Debug)]
 pub enum PhysicsConstraint {
-    Attachment(AttachmentConstraint<'static>),
+    Attachment(AttachmentConstraint),
     Static(StaticConstraint),
     Stretch(StretchConstraint),
     RigidBody(ShapeConstraint),
     Collision(CollisionConstraint)
 }
 
-impl Constraint for AttachmentConstraint<'_> {
+
+impl Constraint for AttachmentConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index]- self.attached_to.position).norm()
+        let ml = positions[self.left_vertex_index];
+        let mr = positions[self.right_vertex_index];
+        (ml - mr).norm()
     }
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
-        vec![
-            ConstrainedGradient {
-                index: self.inp_vertex_index as usize,
-                gradient: (positions[self.inp_vertex_index] - self.attached_to.position) * 2.0
-            }
-        ]
+    let diff = positions[self.left_vertex_index] - positions[self.right_vertex_index];
+    let dist = diff.norm();
+    if dist < 1e-8 {
+        return vec![];
     }
+    let dir = diff / dist;
+    vec![
+        ConstrainedGradient { index: self.left_vertex_index,  gradient: dir  },
+        ConstrainedGradient { index: self.right_vertex_index, gradient: -dir },
+    ]
+}
 }
 
 impl Constraint for StaticConstraint {
@@ -102,35 +116,59 @@ impl Constraint for StaticConstraint {
 
 impl Constraint for CollisionConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        (positions[self.inp_vertex_index] - self.q).dot(&self.n) - 0.01
+        let p = positions[self.inp_vertex_index];
+        let v1 = positions[self.triangle_indices[0]];
+        let v2 = positions[self.triangle_indices[1]];
+        let v3 = positions[self.triangle_indices[2]];
+        let v_to_p = p - v1;
+        let dist = v_to_p.dot(&self.n);
+        let q_c = p - (dist * self.n);
+
+        if !physics::barycentric_test(&q_c, &v1, &v2, &v3) {
+            return 0.0;
+        }
+
+        dist - self.thickness
     }
-    fn gradient(&self, _: &[Vec3]) -> Vec<ConstrainedGradient> {
+
+    fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
+        let p = positions[self.inp_vertex_index];
+        let v1 = positions[self.triangle_indices[0]];
+        let v2 = positions[self.triangle_indices[1]];
+        let v3 = positions[self.triangle_indices[2]];
+
+        let v_to_p = p - v1;
+        let dist = v_to_p.dot(&self.n);
+        let q_c = p - (dist * self.n);
+        let (w1, w2, w3) = physics::get_barycentric_coords(&q_c, &v1, &v2, &v3);
+
         vec![
-            ConstrainedGradient {
-                index: self.inp_vertex_index as usize,
-                gradient: self.n
-            }
+            ConstrainedGradient { index: self.inp_vertex_index, gradient: self.n },
+            ConstrainedGradient { index: self.triangle_indices[0], gradient: -self.n * w1 },
+            ConstrainedGradient { index: self.triangle_indices[1], gradient: -self.n * w2 },
+            ConstrainedGradient { index: self.triangle_indices[2], gradient: -self.n * w3 },
         ]
     }
 }
 
 impl Constraint for StretchConstraint {
     fn evaluate(&self, positions: &[Vec3]) -> f32 {
-        // nalgebra_glm::l1_distance(&positions[self.vert_ind1], &positions[self.vert_ind2]) - self.l0
         let d = nalgebra_glm::distance(&positions[self.vert_ind1], &positions[self.vert_ind2]);
         d - self.l0
     }
     fn gradient(&self, positions: &[Vec3]) -> Vec<ConstrainedGradient> {
-        let dist = nalgebra_glm::l1_distance(&positions[self.vert_ind1], &positions[self.vert_ind2]);
-        // NOTE: downscaling by k
+        let a = positions[self.vert_ind1];
+        let b = positions[self.vert_ind2];
+        let diff = a - b;
+        let dist = nalgebra_glm::length(&diff).max(1e-4);
         vec![
             ConstrainedGradient {
                 index: self.vert_ind1 as usize,
-                gradient: self.k * (positions[self.vert_ind1] - positions[self.vert_ind2]) / dist
+                gradient: diff / dist
             },
             ConstrainedGradient {
                 index: self.vert_ind2 as usize,
-                gradient: self.k * (positions[self.vert_ind2] - positions[self.vert_ind1]) / dist
+                gradient: -diff / dist
             }
         ]
     }
@@ -166,5 +204,23 @@ impl PhysicsConstraint {
             PhysicsConstraint::Collision(_) => Equality::Inequality,
             PhysicsConstraint::RigidBody(_) => panic!("Rigid body constraints do not have an equality type")
         }
-     }
+    }
+
+    pub fn add_offset(&mut self, offset: usize) {
+        match self {
+            PhysicsConstraint::Static(i) => i.inp_vertex_index += offset,
+            PhysicsConstraint::Stretch(i) => {i.vert_ind1 += offset; i.vert_ind2 += offset},
+            PhysicsConstraint::Collision(i) => i.inp_vertex_index += offset,
+            PhysicsConstraint::RigidBody(i) => { i.start_physics_vertices_idx += offset;},
+            PhysicsConstraint::Attachment(_) => panic!("Attachment constraints depend on multiple mobjects. Cannot add offset"),
+        }
+    }
+
+    pub fn k(&self) -> f32 {
+        match self {
+            PhysicsConstraint::Stretch(s) => s.k,
+            // PhysicsConstraint::Collision(_) => 3.0,
+            _ => 1.0
+        }
+    }
 }

@@ -181,11 +181,3 @@ pub fn create_logical_device<S: AsRef<str> + Debug>(
     // dbg!("SEG DONE");
     // d
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn smoketest_physical_device() {}
-}

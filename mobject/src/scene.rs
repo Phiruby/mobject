@@ -1,23 +1,24 @@
 use ash::vk::{
-    self, ApplicationInfo, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Extent2D, Fence, Format, Framebuffer, Handle, Image, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageUsageFlags, ImageView, InstanceCreateInfo, Offset2D, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Rect2D, RenderPass, RenderPassBeginInfo, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SubpassContents, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
+    self, ApplicationInfo, CommandBuffer, CommandBufferBeginInfo, CommandBufferResetFlags, CommandPool, DescriptorBindingFlags, DescriptorImageInfo, DescriptorPoolCreateFlags, DescriptorSet, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorType, DeviceMemory, Fence, Handle, Image, ImageAspectFlags, ImageLayout, ImageUsageFlags, ImageView, InstanceCreateInfo, PhysicalDeviceMemoryProperties, PresentInfoKHR, Queue, Sampler, ShaderStageFlags, StructureType, SubmitInfo, SurfaceKHR, SwapchainKHR, WriteDescriptorSet
 };
 use ash::{Device, Entry, Instance, khr, khr::surface};
 use crate::c_utils::Utf8Pointer;
 use crate::device::QueueFamilies;
+use crate::physics::constraints::{AttachmentConstraint, PhysicsConstraint};
 use crate::pipelines::shadow::ShadowMapping;
 use crate::pipelines::{BezierPipeline, Pipelines, PrimitivePipeline};
 use glfw::PWindow;
-use nalgebra_glm as glm;
-use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, RenderVertex, Shape, primitives};
+use nalgebra_glm::{self as glm, Vec3};
+use crate::shapes::{Animation, BuiltShape, CameraAnimation, CameraMotion, CameraProxy, GlobalUBO, PhysicsVertex, ShapeIntent, primitives};
 use std::collections::{HashMap, VecDeque};
 use cgmath::Vector3;
 use std::ffi::{CString, c_void};
 use std::ops::{Deref, DerefMut};
 use shapeject::SpatialHash3D;
-use crate::{window, swapchain, shaders, render_pass, buffers, texture, shapes, device, pipelines};
+use crate::{window, swapchain, shaders, buffers, texture, shapes, device, pipelines};
 use std::time::{Instant, Duration};
 use crate::shapes::animations::AnimationProxy;
-use crate::physics::pbd::PBDSolver;
+use crate::physics::pbd::{self, PBDSolver};
 pub type MobjectId = u32;
 use crate::MAX_FRAMES_IN_FLIGHT;
 
@@ -46,7 +47,8 @@ impl DerefMut for Anim {
 }
 
 enum Action {
-    AddMobject(MobjectId, Box<dyn Shape>),
+    AddMobject(MobjectId, ShapeIntent),
+    Attach(MobjectId, usize, MobjectId, usize),
     Wait { seconds: u8 },
     Play(Box<dyn Animation>),
     CameraMove(CameraMotion)
@@ -59,16 +61,12 @@ enum Action {
 ///     But any future action will have to wait (e.g: adding new objects)
 /// Moving: all mobjects are freely moving
 enum SceneState {
-    Frozen,
     Waiting{ from: Instant, duration: Duration},
     Moving
 }
 
 pub struct Texture {
-    view: ImageView,
     pub idx: u32,
-    image: Image,
-    memory: DeviceMemory
 }
 
 pub struct Mobject {
@@ -98,27 +96,18 @@ pub struct Scene {
     state: SceneState,
     actions: VecDeque<Action>,
     sync: Vec<window::Sync>,
-    // shadow_barriers: Vec<ImageMemoryBarrier<'a>>,
     device: Device,
     swapchain_device: khr::swapchain::Device,
     window: PWindow,
     swapchain: SwapchainKHR,
     command_buffer: Vec<CommandBuffer>,
     uniform_buffer_mapped_memories: Vec<*mut c_void>,
-    // TODO: confirm if these three are needed
-    depth_image: Image,
-    depth_image_view: ImageView,
-    depth_image_memory: DeviceMemory,
-    // Same with these three as well
     scene_descriptor_sets: [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize],
-    // mobject_descriptor_sets: Vec<[DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize]>,
     mobjects: Vec<Mobject>,
-    mobject_index: HashMap<MobjectId, usize>,
     animations: Vec<Anim>,
     camera_motions: VecDeque<CameraAnimation>,
 
     next_id: MobjectId,
-    extent: Extent2D,
     textures: HashMap<String, Texture>,
     texture_sampler: Sampler,
     queue_families: QueueFamilies,
@@ -129,10 +118,11 @@ pub struct Scene {
     shadow_pipeline: ShadowMapping,
     graphics_queue: Queue,
     cmd_pool: CommandPool,
-    // shadow_framebuffer: Vec<Framebuffer>,
-
     solver: PBDSolver,
-    spatial_hash: SpatialHash3D<Vec<(MobjectId, usize)>>
+    physics_vertices: Vec<PhysicsVertex>,
+    spatial_hash: SpatialHash3D<Vec<(MobjectId, usize)>>,
+    constraints: Vec<PhysicsConstraint>
+
 }
 
 impl Scene {
@@ -190,7 +180,7 @@ impl Scene {
                 physical_device_memory_properties,
                 size_of::<GlobalUBO>() as u64,
             );
-        let (depth_image, depth_image_view, depth_image_memory, depth_image_format) =
+        let (_depth_image, depth_image_view, _depth_image_memory, depth_image_format) =
             buffers::create_depth_buffer(
                 &instance,
                 &logical_device,
@@ -201,7 +191,6 @@ impl Scene {
             );
 
         let sync = window::create_sync_objects(&logical_device);
-        // let shadow_barriers = window::create_image_barriers(&shadow_depth_image);
 
         let texture_sampler = texture::create_sampler(&logical_device, &instance, physical_device,
         vk::FALSE, vk::CompareOp::ALWAYS);
@@ -293,7 +282,7 @@ impl Scene {
             surface_format,
             physical_device_memory_properties
         );
-        let camera_position = glm::vec3(-2.0, -2.0, 2.0);
+        let camera_position = glm::vec3(-0.0, -3.0, 3.0);
         let origin = glm::vec3(0.0, 0.0, 0.0);
         let up = glm::vec3(0.0, 0.0, 1.0);
         let angle = glm::vec1(45.0);
@@ -305,7 +294,6 @@ impl Scene {
             state: SceneState::Moving,
             actions: VecDeque::new(),
             mobjects: Vec::new(),
-            mobject_index: HashMap::new(),
             animations: Vec::new(),
             camera_motions: VecDeque::new(),
             next_id: 0,
@@ -315,12 +303,8 @@ impl Scene {
             window,
             command_buffer,
             swapchain,
-            depth_image,
-            depth_image_view,
-            depth_image_memory,
             uniform_buffer_mapped_memories: uniform_buffer_mapped_memories.to_vec(),
             scene_descriptor_sets,
-            extent,
             textures: HashMap::new(),
             texture_sampler,
             queue_families,
@@ -344,13 +328,16 @@ impl Scene {
             graphics_queue,
             cmd_pool: pool,
             solver: PBDSolver(),
+            physics_vertices: Vec::new(),
             spatial_hash: SpatialHash3D::new((50, 50, 50), Vec::new, SPATIAL_HASH_SIZE)
-                .set_bottom_left(BOTTOM_LEFT)
+                .set_bottom_left(BOTTOM_LEFT),
+            constraints: Vec::new(),
         }
     }
 
     pub fn add_baseplate(&mut self) {
         self.add(primitives::create_baseplate());
+        // todo!();
     }
 
     fn add_texture_to_scene(&self, _image: Image, _memory: DeviceMemory, _mip_levels: u32, image_view: ImageView) {
@@ -382,11 +369,36 @@ impl Scene {
         CameraProxy { }
     }
 
-    pub fn add(&mut self, mobject: Box<dyn Shape>) -> MobjectId {
+    fn add_physics_vertices(
+        &mut self,
+        mobject: &mut Box<dyn BuiltShape>,
+        inverse_masses: Vec<f32>,
+        velocities: Vec<Vec3>,
+        mut constraints: Vec<PhysicsConstraint>,
+        mobj_id: MobjectId
+    ) {
+        let vertices = mobject.get_vertices();
+        let mut physics_vertices: Vec<crate::shapes::PhysicsVertex> = vertices.iter().map(|v| crate::shapes::PhysicsVertex::new(v.position, mobj_id)).collect();
+        let (cm, _) = crate::physics::center_of_mass(&physics_vertices);
+        let total = vertices.len();
+        let start_index = self.physics_vertices.len();
+        // NOTE: need to separately zip separately since passed lengths may differ
+        physics_vertices.iter_mut().for_each(|v| v.with_body_space_position(v.position - cm));
+        physics_vertices.iter_mut().zip(velocities.iter()).for_each(|(v, vel)| v.set_velocity(*vel));
+        physics_vertices.iter_mut().zip(inverse_masses.iter()).for_each(|(v, m)| v.set_inv_mass(*m));
+
+        self.physics_vertices.extend(physics_vertices);
+        mobject.set_physics_index_range(start_index, total);
+        constraints.iter_mut().for_each(|c| c.add_offset(start_index));
+        self.constraints.extend(constraints);
+        mobject.set_com(cm);
+    }
+
+    pub fn add(&mut self, mobject: ShapeIntent) -> MobjectId {
         let id = self.next_id;
         self.next_id += 1;
 
-        let texture_path = mobject.texture_path();
+        let texture_path = mobject.entity.texture_path().clone();
         if let Some(pt) = texture_path {
             if self.textures.contains_key(pt) { }
             else {
@@ -394,10 +406,11 @@ impl Scene {
                 let texture_image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
                 self.add_texture_to_scene(image, memory, mip_levels, texture_image_view);
                 let idx = self.textures.len() as u32;
-                self.textures.insert(pt.to_string(), Texture { view: texture_image_view, idx, image, memory });
+                self.textures.insert(pt.to_string(), Texture { idx });
             }
         }
-
+        // let mut build_mobj = mobject.entity.build(&self.device, self.physical_device_properties);
+        // self.add_physics_vertices(&mut build_mobj, mobject.inverse_masses, mobject.velocities, mobject.constraints, id);
         self.actions.push_back(Action::AddMobject(id, mobject));
         id
     }
@@ -417,6 +430,10 @@ impl Scene {
         self.actions.push_back(Action::Play(animation));
     }
 
+    pub fn attach(&mut self, id_l: MobjectId, vert_idx_l: usize, id_r: MobjectId, vert_idx_r: usize) {
+        self.actions.push_back(Action::Attach(id_l, vert_idx_l, id_r, vert_idx_r));
+    }
+
     fn set_state(&mut self, state: SceneState) {
         self.state = state;
     }
@@ -426,21 +443,32 @@ impl Scene {
         let image_view = texture::create_texture_image_view(&self.device, image, mip_levels);
         self.add_texture_to_scene(image, memory, mip_levels, image_view);
         let idx = self.textures.len() as u32;
-        self.textures.insert(String::from("blank"), Texture { view: image_view, idx, image, memory });
+        self.textures.insert(String::from("blank"), Texture { idx });
     }
 
     fn take_action(&mut self) {
         if self.actions.is_empty() { return; }
         let action = self.actions.pop_front().unwrap();
         match action {
-            Action::AddMobject(id, mobj) => {
-                let build_mobject = mobj.build(&self.device, self.physical_device_properties);
+            Action::AddMobject(id, mobject) => {
+                let mut build_mobject = mobject.entity.build(&self.device, self.physical_device_properties);
+                self.add_physics_vertices(&mut build_mobject, mobject.inverse_masses, mobject.velocities, mobject.constraints, id);
                 let mobj_desc_sets = self.make_mobject_descriptor_set(&build_mobject);
-                let index = self.mobjects.len();
-
                 self.mobjects.push(Mobject { id, mobject: build_mobject, descriptor_sets: mobj_desc_sets });
-                self.mobject_index.insert(id, index);
             },
+
+            Action::Attach(id_l, vert_idx_l, id_r, vert_idx_r) => {
+                let (ml, _) = self.mobjects[id_l as usize].get_physics_index_range();
+                let (mr, _) = self.mobjects[id_r as usize].get_physics_index_range();
+                self.constraints.push(
+                    PhysicsConstraint::Attachment(
+                        AttachmentConstraint {
+                            left_vertex_index: ml + vert_idx_l,
+                            right_vertex_index: mr + vert_idx_r
+                        }
+                    )
+                );
+            }
             Action::Wait { seconds } => self.set_state(SceneState::Waiting{ from: Instant::now(), duration: Duration::from_secs(seconds as u64) }),
 
             Action::Play(anim) => {
@@ -453,8 +481,10 @@ impl Scene {
                 );
             }
         }
+        if !self.actions.is_empty() && let Some(Action::Attach(_, _, _, _)) = self.actions.front() {
+            self.take_action();
+        }
     }
-
     fn make_mobject_descriptor_set(&self, mobject: &Box<dyn BuiltShape>) -> [DescriptorSet; MAX_FRAMES_IN_FLIGHT as usize] {
         let pipeline = mobject.get_pipeline();
         let (uniform_buffers, _, _) = mobject.get_uniform_buffer();
@@ -484,9 +514,9 @@ impl Scene {
                 self.take_action();
             }
             self.draw_frame(graphics_queue, present_queue, current_frame);
-
-            self.solver.update(&mut self.mobjects, &mut self.spatial_hash, 0.002);
-            self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(); });
+            self.solver.update(&self.mobjects, &mut self.physics_vertices, &self.constraints, &mut self.spatial_hash, 0.002);
+            self.mobjects.iter_mut().for_each(|mobj| { mobj.sync_phys_and_render_vertices(&self.physics_vertices); });
+            pbd::rebuild_spatial_hash(&mut self.spatial_hash, &mut self.mobjects);
 
             current_frame = (current_frame + 1) % (MAX_FRAMES_IN_FLIGHT as usize);
             if let SceneState::Waiting { from, duration } = self.state {

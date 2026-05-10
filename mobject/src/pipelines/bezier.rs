@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 
-use ash::vk::{self, Buffer, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, Framebuffer, IndexType, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineLayout, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, StructureType, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, WriteDescriptorSet};
+use ash::vk::{self, Buffer, CommandBuffer, DescriptorPool, DescriptorPoolSize, DescriptorSet, DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorType, Extent2D, PhysicalDeviceMemoryProperties, PrimitiveTopology, PushConstantRange, RenderPass, ShaderStageFlags, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
-use crate::shapes::{BuiltShape, UBO, Vertex, RenderVertex};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, window};
+use crate::shapes::{BuiltShape, Vertex, RenderVertex};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders};
 use crate::pipelines::{self, CompletePipeline, GraphicsPipeline, PipelineState};
 
 pub struct BezierPipeline {
-    // device: &'a Device,
     state: PipelineState
 }
 
@@ -16,7 +15,7 @@ pub struct BezierPipeline {
 impl GraphicsPipeline for BezierPipeline {
 
 
-    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static> {
+    fn get_pipeline_info(extent: Extent2D) -> CompletePipeline<'static> {
         CompletePipeline {
             extent,
             vertex_path: "shaders/bezier/vert.spv",
@@ -27,7 +26,6 @@ impl GraphicsPipeline for BezierPipeline {
             vertex_attribute_description: Self::vertex_attribute_description().into(),
             topology: PrimitiveTopology::PATCH_LIST,
             color_attachment_count: 1,
-            render_pass,
             // use to index texture element
             push_constant: Some(
                 PushConstantRange {

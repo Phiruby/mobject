@@ -8,9 +8,8 @@ pub use bezier::BezierPipeline;
 use ash::vk::{self, Buffer, ClearColorValue, ClearDepthStencilValue, ClearValue, CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorType, DeviceMemory, Extent2D, Framebuffer, GraphicsPipelineCreateInfo, IndexType, Offset2D, PhysicalDeviceMemoryProperties, Pipeline, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineTessellationStateCreateFlags, PipelineTessellationStateCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PrimitiveTopology, PushConstantRange, Rect2D, RenderPass, RenderPassBeginInfo, ShaderModule, ShaderModuleCreateInfo, ShaderStageFlags, StructureType, SubpassContents, SurfaceFormatKHR, VertexInputAttributeDescription, VertexInputBindingDescription, Viewport, WriteDescriptorSet};
 use ash::Device;
 use crate::scene::{Mobject, Texture};
-use core::ffi::c_void;
-use crate::shapes::{BuiltShape, RenderVertex, UBO};
-use crate::{MAX_FRAMES_IN_FLIGHT, buffers, render_pass, shaders, window};
+use crate::shapes::{BuiltShape, RenderVertex};
+use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shaders, window};
 
 /// This specifies the kind of pipeline the mobject needs to be rendered
 /// Each pipeline has their own required descriptor set layout that needs to be
@@ -31,7 +30,6 @@ struct CompletePipeline<'a> {
     vertex_binding_description: VertexInputBindingDescription,
     vertex_attribute_description: Vec<VertexInputAttributeDescription>,
     topology: PrimitiveTopology,
-    render_pass: RenderPass,
     color_attachment_count: u32,
     rasterization_info: PipelineRasterizationStateCreateInfo<'a>,
     push_constant: Option<PushConstantRange>
@@ -43,9 +41,6 @@ struct PipelineState {
     pub vertex_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
     pub index_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
     pub index_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
-    uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT as usize],
-    uniform_buffer_memories: [DeviceMemory; MAX_FRAMES_IN_FLIGHT as usize],
-    uniform_buffer_mapped_memories: [*mut c_void; MAX_FRAMES_IN_FLIGHT as usize],
     render_pass: RenderPass,
     // TODO: move framebuffers to pipeline level
     framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
@@ -56,7 +51,7 @@ struct PipelineState {
 }
 
 trait GraphicsPipeline {
-    fn get_pipeline_info(render_pass: RenderPass, extent: Extent2D) -> CompletePipeline<'static>;
+    fn get_pipeline_info(extent: Extent2D) -> CompletePipeline<'static>;
     fn render_pass(device: &Device, extent: Extent2D, depth_format: vk::Format, surface_format: SurfaceFormatKHR) -> RenderPass;
     fn vertex_binding_description() -> VertexInputBindingDescription;
     fn vertex_attribute_description() -> Vec<VertexInputAttributeDescription>;
@@ -73,8 +68,8 @@ impl PipelineState {
         render_pass: RenderPass,
         framebuffers: [Framebuffer; MAX_FRAMES_IN_FLIGHT as usize],
         extent: Extent2D,
-        surface_format: SurfaceFormatKHR,
-        depth_format: vk::Format,
+        _surface_format: SurfaceFormatKHR,
+        _depth_format: vk::Format,
         physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     ) -> Self {
 
@@ -82,9 +77,7 @@ impl PipelineState {
 
         let (index_buffers, index_buffer_memories) = buffers::create_index_buffers(logical_device, nindices, physical_device_memory_properties);
 
-        let (uniform_buffers, uniform_buffer_memories, ubo_mapped_memories) = buffers::create_uniform_buffers(logical_device, physical_device_memory_properties, std::mem::size_of::<UBO>() as u64);
-
-        let complete_pipeline = P::get_pipeline_info(render_pass, extent);
+        let complete_pipeline = P::get_pipeline_info(extent);
         let mobject_descriptor_set_layout = P::mobject_descriptor_set_layout(logical_device);
         let mobject_descriptor_pool = P::mobject_descriptor_pool(logical_device);
         let (pipeline, pipeline_layout) = create_graphics_pipeline(logical_device, extent, complete_pipeline, render_pass, mobject_descriptor_set_layout, scene_descriptor_layout);
@@ -94,9 +87,6 @@ impl PipelineState {
             vertex_buffer_memories,
             index_buffers,
             index_buffer_memories,
-            uniform_buffers,
-            uniform_buffer_memories,
-            uniform_buffer_mapped_memories: ubo_mapped_memories,
             render_pass,
             framebuffers,
             mobject_descriptor_set_layout,
@@ -165,7 +155,7 @@ impl PipelineState {
         let clear_colors = [
             ClearValue {
                 color: ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0]
+                    float32: [0.529, 0.808, 0.922, 0.0]
                 },
             },
             ClearValue {

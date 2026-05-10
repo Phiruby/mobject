@@ -2,37 +2,41 @@ use ash::Device;
 use ash::vk::{
     Buffer, DeviceMemory, PhysicalDeviceMemoryProperties
 };
-use nalgebra_glm as glm;
+use nalgebra_glm::{self as glm, Vec2};
 use nalgebra_glm::Vec3;
 use std::{os::raw::c_void};
 
+use crate::shapes::ShapeIntent;
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}};
 use crate::{define_shape, shapes};
 use crate::pipelines::Pipelines;
 use crate::physics::constraints::*;
+use crate::shapes::Manifold;
 
 define_shape!(
     pub struct Cloth {
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Primitive
+    Pipelines::Primitive,
+    Manifold::TwoD
 );
 
-fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>) {
+fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<usize>, Vec<Vec2>) {
     let mut positions = vec![];
+    let mut tex_coords: Vec<Vec2> = vec![];
     let mut indices = vec![];
-    let m = spacing * (width / 2) as f32;
-    let my = spacing * (height / 2) as f32;
+    let half_w = (width.saturating_sub(1)) as f32 * spacing * 0.5;
+    let half_h = (height.saturating_sub(1)) as f32 * spacing * 0.5;
     // positions
     for y in 0..height {
         for x in 0..width {
             positions.push(Vec3::new(
-                x as f32 * spacing - m,
-                // 0.0,
-                y as f32 * spacing - my,
-                0.35
+                x as f32 * spacing - half_w,
+                y as f32 * spacing - half_h,
+                1.0
             ));
+            tex_coords.push(Vec2::new(x as f32 / width as f32, y as f32 / height as f32));
         }
     }
 
@@ -54,7 +58,7 @@ fn generate_grid(width: usize, height: usize, spacing: f32) -> (Vec<Vec3>, Vec<u
         }
     }
 
-    (positions, indices)
+    (positions, indices, tex_coords)
 }
 
 fn create_stretch_constraints(
@@ -104,25 +108,26 @@ fn create_stretch_constraints(
 
 
 
-impl Default for Cloth {
-    fn default() -> Self {
+impl Cloth {
+    pub fn example() -> ShapeIntent {
         let width = 10;
         let height = 10;
         let spacing = 0.1;
 
-        let (positions, indices) = generate_grid(width, height, spacing);
+        let (positions, indices, tex_coords) = generate_grid(width, height, spacing);
 
         let normals = shapes::compute_normals(&indices, &positions);
 
         let vertices: Vec<RenderVertex> = positions
             .iter()
             .zip(normals.iter())
-            .map(|(pos, norm)| {
+            .zip(tex_coords.iter())
+            .map(|((pos, norm), tex)| {
                 RenderVertex::new(
                     *pos,
-                    Vec3::new(0.0, 0.0, 1.0),
+                    Vec3::new(1.0, 1.0, 1.0),
                     *norm,
-                    None,
+                    Some(*tex),
                 )
             })
             .collect();
@@ -135,10 +140,11 @@ impl Default for Cloth {
             &positions,
             0.5,
         ));
-
         Self::new()
         .with_vertices(vertices)
         .with_indices(indices.iter().map(|&i| i as u32).collect(),)
+        .with_texture(String::from("textures/cloth.jpg"))
+        .finish_construction()
         .with_constraints(constraints)
     }
 }

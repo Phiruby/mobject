@@ -7,13 +7,15 @@ use nalgebra_glm::{Vec2, Vec3};
 use std::{os::raw::c_void};
 use crate::{MAX_FRAMES_IN_FLIGHT, buffers, shapes::{RenderVertex, UBO, Shape, BuiltShape}, pipelines::Pipelines};
 use crate::{define_shape, shapes};
+use crate::shapes::Manifold;
 
 define_shape!(
     pub struct Points {
         vertices: Vec<RenderVertex>,
         indices: Vec<u32>,
     },
-    Pipelines::Bezier
+    Pipelines::Bezier,
+    Manifold::TwoD
 );
 
 impl Default for Points {
